@@ -1,0 +1,53 @@
+import Dexie, { type Table } from 'dexie';
+import type { Block, Exercise, FoodEntry, MealPreset, Session, Settings, StepDay, WeekPlan, WeekendLog, WeighIn } from './types';
+import { ALL_EXERCISES, BLOCKS, MEALS, SETTINGS } from './seed';
+
+export class MineDB extends Dexie {
+  exercises!: Table<Exercise, string>;
+  blocks!: Table<Block, string>;
+  weeks!: Table<WeekPlan, string>;
+  sessions!: Table<Session, string>;
+  weighIns!: Table<WeighIn, string>;
+  steps!: Table<StepDay, string>;
+  food!: Table<FoodEntry, string>;
+  meals!: Table<MealPreset, string>;
+  weekend!: Table<WeekendLog, string>;
+  settings!: Table<Settings, string>;
+
+  constructor() {
+    super('the-mine');
+    this.version(1).stores({
+      exercises: 'id, name, group, source',
+      blocks: 'id, order',
+      weeks: 'weekStart',
+      sessions: 'id, date, blockId',
+      weighIns: 'id, date',
+      steps: 'date',
+      food: 'id, date',
+      meals: 'id, order',
+      weekend: 'weekStart',
+      settings: 'id',
+    });
+  }
+}
+
+export const db = new MineDB();
+
+/** Seed once (idempotent). New seed exercises are added on later launches without touching user edits. */
+export async function ensureSeed() {
+  const settings = await db.settings.get('settings');
+  if (!settings) {
+    await db.transaction('rw', db.exercises, db.blocks, db.meals, db.settings, async () => {
+      await db.exercises.bulkPut(ALL_EXERCISES);
+      await db.blocks.bulkPut(BLOCKS);
+      await db.meals.bulkPut(MEALS);
+      await db.settings.put(SETTINGS);
+    });
+    return;
+  }
+  const existing = new Set((await db.exercises.toCollection().primaryKeys()) as string[]);
+  const missing = ALL_EXERCISES.filter((e) => !existing.has(e.id));
+  if (missing.length) await db.exercises.bulkAdd(missing);
+}
+
+export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
