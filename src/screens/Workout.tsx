@@ -15,6 +15,8 @@ export function Workout({ go, settings, toast }: ScreenProps) {
   const session = sessions.find((s) => !s.endedAt) ?? sessions.find((s) => s.date === today());
   const [exIdx, setExIdx] = useState(0);
   const [rest, setRest] = useState<number | null>(null);
+  const [focus, setFocus] = useState<{ setNo: number; field: 'kg' | 'reps' } | null>(null);
+  useEffect(() => { setFocus(null); }, [exIdx]);
   const [tick, setTick] = useState(0);
   const restEnd = useRef<number | null>(null);
   useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
@@ -42,8 +44,23 @@ export function Workout({ go, settings, toast }: ScreenProps) {
   const update = (setNo: number, patch: Partial<SetLog>) =>
     db.sessions.update(session.id, { sets: session.sets.map((s) => (s.exerciseId === exId && s.setNo === setNo ? { ...s, ...patch } : s)) });
   const toggle = async (s: SetLog) => {
-    await update(s.setNo, { done: !s.done });
+    if (!s.done) {
+      // ticking a set copies its numbers to the remaining untouched sets below
+      await db.sessions.update(session.id, { sets: session.sets.map((x) => (x.exerciseId === exId && x.setNo === s.setNo ? { ...x, done: true } : x.exerciseId === exId && x.setNo > s.setNo && !x.done ? { ...x, kg: s.kg, reps: s.reps } : x)) });
+      setFocus(null);
+    } else await update(s.setNo, { done: false });
     if (!s.done) { restEnd.current = Date.now() + settings.restSeconds * 1000; setRest(settings.restSeconds); }
+  };
+  const bump = (setNo: number, field: 'kg' | 'reps', d: number) => {
+    const cur = sets.find((x) => x.setNo === setNo); if (!cur) return;
+    update(setNo, { [field]: Math.max(0, Math.round((cur[field] + d) * 100) / 100) } as Partial<SetLog>);
+  };
+  const sameAsLast = () => {
+    const prior = sessions.filter((x) => x.endedAt && x.date < session.date && x.sets.some((y) => y.exerciseId === exId && y.done)).sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (!prior) return toast('No previous session for this lift');
+    const prev = prior.sets.filter((y) => y.exerciseId === exId && y.done);
+    db.sessions.update(session.id, { sets: session.sets.map((x) => { if (x.exerciseId !== exId || x.done) return x; const p = prev[x.setNo - 1] ?? prev[prev.length - 1]; return { ...x, kg: p.kg, reps: p.reps }; }) });
+    toast('Filled from last time');
   };
   const addSet = () => { const lastSet = sets.at(-1); db.sessions.update(session.id, { sets: [...session.sets, { exerciseId: exId, setNo: sets.length + 1, kg: lastSet?.kg ?? 0, reps: lastSet?.reps ?? 10, done: false }] }); };
   const removeSet = () => { if (sets.length <= 1) return; db.sessions.update(session.id, { sets: session.sets.filter((s) => !(s.exerciseId === exId && s.setNo === sets.length)) }); };
@@ -76,18 +93,33 @@ export function Workout({ go, settings, toast }: ScreenProps) {
         <div className="setrow" style={{ height: 28 }}><div className="label" style={{ textAlign: 'center' }}>Set</div><div className="label" style={{ textAlign: 'center' }}>{ex?.bodyweight ? 'kg (+)' : 'kg'}</div><div className="label" style={{ textAlign: 'center' }}>Reps</div><div /></div>
         {sets.map((s) => {
           const cls = s.done ? ' done' : s.setNo === curSet ? ' cur' : '';
+          const f = focus?.setNo === s.setNo ? focus.field : null;
+          const sel = (field: 'kg' | 'reps') => (f === field ? { outline: '2px solid var(--acc)' } : {});
           return (
-            <div key={s.setNo} className="setrow">
-              <div className="small" style={{ textAlign: 'center', fontWeight: 600, color: 'var(--muted)' }}>{s.setNo}</div>
-              <input className={'cell num' + cls} inputMode="decimal" value={s.kg || ''} placeholder={ex?.bodyweight ? 'BW' : '0'} onChange={(e) => update(s.setNo, { kg: num(e.target.value) })} />
-              <input className={'cell num' + cls} inputMode="numeric" value={s.reps || ''} onChange={(e) => update(s.setNo, { reps: num(e.target.value) })} />
-              <button className={'tick' + cls} onClick={() => toggle(s)}>{(s.done || s.setNo === curSet) && <Icon name="check" size={20} sw={3} />}</button>
+            <div key={s.setNo} className="col" style={{ gap: 0 }}>
+              <div className="setrow" style={{ height: 60 }}>
+                <div className="small" style={{ textAlign: 'center', fontWeight: 600, color: 'var(--muted)' }}>{s.setNo}</div>
+                <button className={'cell num' + cls} style={{ height: 52, fontSize: 22, ...sel('kg') }} onClick={() => setFocus(f === 'kg' ? null : { setNo: s.setNo, field: 'kg' })}>{ex?.bodyweight && !s.kg ? 'BW' : s.kg || '0'}</button>
+                <button className={'cell num' + cls} style={{ height: 52, fontSize: 22, ...sel('reps') }} onClick={() => setFocus(f === 'reps' ? null : { setNo: s.setNo, field: 'reps' })}>{s.reps || '0'}</button>
+                <button className={'tick' + cls} style={{ height: 52 }} onClick={() => toggle(s)}>{(s.done || s.setNo === curSet) && <Icon name="check" size={20} sw={3} />}</button>
+              </div>
+              {f && (
+                <div style={{ display: 'grid', gridTemplateColumns: f === 'kg' ? 'repeat(6, minmax(0, 1fr)) 56px' : 'repeat(4, minmax(0, 1fr)) 56px', gap: 4, padding: '0 0 10px 44px' }}>
+                  {(f === 'kg' ? [-5, -2.5, -1.25, 1.25, 2.5, 5] : [-2, -1, 1, 2]).map((d) => (
+                    <button key={d} className="btn ghost num" style={{ height: 48, fontSize: 13, letterSpacing: 0, textTransform: 'none', padding: 0, fontWeight: 600, minWidth: 0, color: d < 0 ? 'var(--muted)' : 'var(--ink)' }} onClick={() => bump(s.setNo, f, d)}>{d > 0 ? '+' : ''}{d}</button>
+                  ))}
+                  <input className="field num" style={{ width: 56, height: 48, textAlign: 'center', fontSize: 16, padding: 0 }} inputMode="decimal" placeholder="…" onChange={(e) => update(s.setNo, { [f]: num(e.target.value) } as Partial<SetLog>)} />
+                </div>
+              )}
             </div>
           );
         })}
-        <div className="row" style={{ justifyContent: 'flex-end', gap: 8, padding: '6px 0 2px' }}>
+        <div className="row between" style={{ gap: 8, padding: '6px 0 2px' }}>
+          <button className="pill sm" onClick={sameAsLast} disabled={!last}>Same as last time</button>
+          <div className="row" style={{ gap: 8 }}>
           <button className="pill sm" onClick={removeSet}><Icon name="minus" size={14} /> set</button>
           <button className="pill sm" onClick={addSet}><Icon name="plus" size={14} /> set</button>
+          </div>
         </div>
       </div>
 

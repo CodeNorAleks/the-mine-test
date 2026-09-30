@@ -159,8 +159,11 @@ export function Today({ go, settings, toast }: ScreenProps) {
           <div className="row" style={{ gap: 10 }}><span style={{ color: 'var(--acc)' }}><Icon name="steps" /></span><div><div style={{ fontWeight: 600 }}>Steps</div><div className="small muted">{stepDays} of {settings.stepDaysGoal} days over {settings.stepGoal / 1000}k this week</div></div></div>
           <div className="display num" style={{ fontSize: 26 }}>{todaySteps?.toLocaleString('nb-NO') ?? '—'}</div>
         </div>
+        <div className="row" style={{ gap: 6 }}>
+          {[5000, 8000, 10000, 12000].map((n) => <button key={n} className={'pill sm' + (todaySteps === n ? ' on' : '')} style={{ flex: 1, justifyContent: 'center' }} onClick={() => db.steps.put({ date: t, steps: n }).then(() => toast(`Steps: ${n.toLocaleString('nb-NO')}`))}>{n / 1000}k</button>)}
+        </div>
         <div className="row">
-          <input className="field" inputMode="numeric" placeholder="Today's steps" value={stepInput} onChange={(e) => setStepInput(e.target.value)} />
+          <input className="field num" inputMode="numeric" placeholder="Exact steps" value={stepInput} onChange={(e) => setStepInput(e.target.value)} />
           <button className="btn sm" onClick={saveSteps}>Save</button>
         </div>
       </div>

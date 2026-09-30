@@ -9,7 +9,8 @@ import type { ScreenProps } from './types';
 export function Body({ settings, toast }: ScreenProps) {
   const weighIns = useLiveQuery(() => db.weighIns.orderBy('date').toArray(), []) ?? [];
   const steps = useLiveQuery(() => db.steps.toArray(), []) ?? [];
-  const [kg, setKg] = useState('');
+  const [kg, setKg] = useState(String(weighIns.at(-1)?.kg ?? settings.bodyweightKg));
+  const nudge = (d: number) => setKg((v) => String(Math.round(((Number(v.replace(',', '.')) || settings.bodyweightKg) + d) * 10) / 10));
   const [date, setDate] = useState(today());
   const last = weighIns.at(-1), prev = weighIns.at(-2);
   const pct = last ? Math.max(0, Math.min(1, (settings.startKg - last.kg) / (settings.startKg - settings.goalKg))) : 0;
@@ -45,10 +46,16 @@ export function Body({ settings, toast }: ScreenProps) {
           <div className="row between small" style={{ fontWeight: 600 }}><span className="muted">{settings.startKg} start</span><span style={{ color: 'var(--acc)' }}>{Math.round(pct * 100)} % there</span><span className="muted">{settings.goalKg} goal</span></div>
           <div className="bar" style={{ height: 10 }}><i style={{ width: `${pct * 100}%` }} /></div>
         </div>
-        <div className="row">
-          <input className="field num" inputMode="decimal" placeholder="kg" value={kg} onChange={(e) => setKg(e.target.value)} />
-          <input className="field" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: 150 }} />
-          <button className="btn acc sm" onClick={save}><Icon name="plus" size={18} sw={3} /></button>
+        <div className="col" style={{ gap: 8 }}>
+          <div className="row" style={{ gap: 6 }}>
+            {[-1, -0.5, -0.1].map((d) => <button key={d} className="btn ghost" style={{ flex: 1, height: 48, fontSize: 15, letterSpacing: 0, textTransform: 'none', padding: 0, color: 'var(--muted)' }} onClick={() => nudge(d)}>{d}</button>)}
+            <input className="field num" style={{ width: 84, height: 48, textAlign: 'center', fontSize: 20, fontWeight: 700 }} inputMode="decimal" value={kg} onChange={(e) => setKg(e.target.value)} />
+            {[0.1, 0.5, 1].map((d) => <button key={d} className="btn ghost" style={{ flex: 1, height: 48, fontSize: 15, letterSpacing: 0, textTransform: 'none', padding: 0 }} onClick={() => nudge(d)}>+{d}</button>)}
+          </div>
+          <div className="row">
+            <input className="field" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ flex: 1 }} />
+            <button className="btn acc sm" style={{ flex: 1 }} onClick={save}>Save {kg} kg</button>
+          </div>
         </div>
       </div>
 
