@@ -5,10 +5,13 @@ import { Icon } from '../ui/Icon';
 import { LineChart } from '../ui/Charts';
 import { addDays, fmtShort, today, weekStart, weekdayOf } from '../lib/dates';
 import type { ScreenProps } from './types';
+import { smooth } from '../lib/training';
 
 export function Body({ settings, toast }: ScreenProps) {
   const weighIns = useLiveQuery(() => db.weighIns.orderBy('date').toArray(), []) ?? [];
   const steps = useLiveQuery(() => db.steps.toArray(), []) ?? [];
+  const measurements = useLiveQuery(() => db.measurements.orderBy('date').toArray(), []) ?? [];
+  const [m, setM] = useState<{ waist: string; chest: string; arm: string; thigh: string }>({ waist: '', chest: '', arm: '', thigh: '' });
   const [kg, setKg] = useState(String(weighIns.at(-1)?.kg ?? settings.bodyweightKg));
   const nudge = (d: number) => setKg((v) => String(Math.round(((Number(v.replace(',', '.')) || settings.bodyweightKg) + d) * 10) / 10));
   const [date, setDate] = useState(today());
@@ -17,7 +20,8 @@ export function Body({ settings, toast }: ScreenProps) {
   const ws = weekStart();
   const stepDays = steps.filter((s) => s.date >= ws && s.date <= addDays(ws, 6) && s.steps >= settings.stepGoal).length;
   // weekly pace from the last 4 weigh-ins
-  const recent = weighIns.slice(-5);
+  const sm = smooth(weighIns);
+  const recent = sm.slice(-6);
   const pace = recent.length >= 2 ? ((recent[0].kg - recent.at(-1)!.kg) / Math.max(1, (new Date(recent.at(-1)!.date).getTime() - new Date(recent[0].date).getTime()) / (7 * 86400000))) : 0;
   const weeksLeft = last && pace > 0 ? (last.kg - settings.goalKg) / pace : null;
   const eta = weeksLeft ? new Date(Date.now() + weeksLeft * 7 * 86400000) : null;
@@ -61,7 +65,8 @@ export function Body({ settings, toast }: ScreenProps) {
 
       <div className="card col" style={{ gap: 8 }}>
         <div className="row between"><div className="label">Trend · {weighIns.length} weigh-ins</div>{pace > 0 && <div className="small muted" style={{ fontWeight: 600 }}>avg −{pace.toFixed(1)} kg / wk</div>}</div>
-        <LineChart points={weighIns.slice(-16).map((w) => w.kg)} ymin={Math.min(settings.goalKg, ...weighIns.map((w) => w.kg)) - 1} ymax={Math.max(settings.startKg, ...weighIns.map((w) => w.kg)) + 1} />
+        <LineChart points={sm.slice(-16).map((w) => Math.round(w.kg * 10) / 10)} ymin={Math.min(settings.goalKg, ...weighIns.map((w) => w.kg)) - 1} ymax={Math.max(settings.startKg, ...weighIns.map((w) => w.kg)) + 1} />
+        <div className="small muted">7-day smoothed — daily noise from water and food is averaged out.</div>
         <div className="small muted">{eta ? <>At this pace: {settings.goalKg} kg around <b style={{ color: 'var(--ink)' }}>{eta.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</b></> : 'Log a few Friday weigh-ins to see your pace.'}</div>
       </div>
 
@@ -78,6 +83,17 @@ export function Body({ settings, toast }: ScreenProps) {
         </div>
       </div>
 
+      <div className="card col" style={{ gap: 8 }}>
+        <div className="row between"><div className="label">Measurements · cm</div>{measurements.length > 0 && <div className="small muted">{fmtShort(measurements.at(-1)!.date)}</div>}</div>
+        <div className="grid2" style={{ gap: 6 }}>
+          {(['waist', 'chest', 'arm', 'thigh'] as const).map((k) => {
+            const last = [...measurements].reverse().find((x) => x[k] !== undefined)?.[k];
+            return <label key={k} className="col" style={{ gap: 2 }}><span className="label" style={{ fontSize: 9 }}>{k}{last ? ` · last ${last}` : ''}</span><input className="field num" inputMode="decimal" placeholder={last ? String(last) : '—'} value={m[k]} onChange={(e) => setM({ ...m, [k]: e.target.value })} /></label>;
+          })}
+        </div>
+        <button className="btn ghost sm" onClick={async () => { const v = Object.fromEntries(Object.entries(m).filter(([, x]) => x).map(([k, x]) => [k, Number(x.replace(',', '.'))])); if (!Object.keys(v).length) return; await db.measurements.add({ id: uid(), date, ...v }); setM({ waist: '', chest: '', arm: '', thigh: '' }); toast('Measurements saved'); }}>Save measurements</button>
+        {measurements.length > 1 && (() => { const a = measurements[0], b = measurements.at(-1)!; return <div className="small muted">Since {fmtShort(a.date)}: {(['waist', 'chest', 'arm', 'thigh'] as const).filter((k) => a[k] && b[k]).map((k) => `${k} ${(b[k]! - a[k]!) > 0 ? '+' : ''}${(b[k]! - a[k]!).toFixed(1)}`).join(' · ') || '—'}</div>; })()}
+      </div>
       <div className="col" style={{ gap: 8 }}>
         <div className="label">Log</div>
         <div className="card list">

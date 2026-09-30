@@ -48,8 +48,13 @@ src/ui        icons, body map, charts
 public/       lifter illustration + app icons
 ```
 
+## v1.1 (test branch)
+
+Easier input (steppers, copy-down on tick, same-as-last), plate calculator, progression suggestions, warm-up ramp, estimated 1RM, week A/B alternatives per lift, imported fitnessphantom programs (import a day as a block), deload warning, monthly summary share card, mining milestones, streak grace days, body measurements, 7-day smoothed weight trend, protein target, last-7-days food view, dark mode, JSON backup.
+
 ## To do
 
-- Import the fitnessphantom / fitnessprogramer libraries
-- Export / import backup (JSON)
+- Cloud sync between devices (Firebase)
+- fitnessprogramer.com directory with GIFs
+- Barcode / food search (Open Food Facts)
 - Illustrated muscle map in the same hand as the logo

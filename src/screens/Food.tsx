@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, uid } from '../db/db';
 import { Icon } from '../ui/Icon';
 import { Ring } from '../ui/Charts';
-import { fmtLong, today, weekStart } from '../lib/dates';
+import { addDays, fmtLong, today, weekStart } from '../lib/dates';
 import type { ScreenProps } from './types';
 
 export function Food({ settings, toast }: ScreenProps) {
@@ -12,6 +12,12 @@ export function Food({ settings, toast }: ScreenProps) {
   const meals = useLiveQuery(() => db.meals.orderBy('order').toArray(), []) ?? [];
   const entries = useLiveQuery(() => db.food.where('date').equals(t).toArray(), [t]) ?? [];
   const weekend = useLiveQuery(() => db.weekend.get(ws), [ws]);
+  const weekFood = useLiveQuery(() => db.food.where('date').between(addDays(t, -6), t, true, true).toArray(), [t]) ?? [];
+  const weighIns = useLiveQuery(() => db.weighIns.orderBy('date').toArray(), []) ?? [];
+  const proteinTarget = settings.proteinTarget ?? Math.round(settings.goalKg * 2);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(t, i - 6)).map((d) => ({ d, kcal: weekFood.filter((f) => f.date === d).reduce((a, f) => a + f.kcal, 0) }));
+  const logged = days.filter((x) => x.kcal > 0);
+  const avg = logged.length ? Math.round(logged.reduce((a, x) => a + x.kcal, 0) / logged.length) : 0;
   const [name, setName] = useState(''); const [kcal, setKcal] = useState(''); const [protein, setProtein] = useState('');
   const eaten = entries.reduce((a, e) => a + e.kcal, 0);
   const prot = entries.reduce((a, e) => a + e.protein, 0);
@@ -48,8 +54,15 @@ export function Food({ settings, toast }: ScreenProps) {
         <div className="col" style={{ gap: 12, flex: 1 }}>
           <div><div className="label">Eaten</div><div className="display num" style={{ fontSize: 26 }}>{eaten}</div></div>
           <div><div className="label">Budget</div><div className="display num" style={{ fontSize: 26, color: 'var(--muted)' }}>{settings.kcalBudget}</div></div>
-          <div><div className="label">Protein</div><div className="display num" style={{ fontSize: 26 }}>{prot} <span style={{ fontSize: 14, color: 'var(--muted)' }}>g</span></div></div>
+          <div><div className="label">Protein · target {proteinTarget} g</div><div className="display num" style={{ fontSize: 26 }}>{prot} <span style={{ fontSize: 14, color: 'var(--muted)' }}>g</span></div><div className="bar" style={{ marginTop: 4 }}><i className="ok" style={{ width: `${Math.min(100, (prot / proteinTarget) * 100)}%` }} /></div></div>
         </div>
+      </div>
+      <div className="card col" style={{ gap: 8 }}>
+        <div className="row between"><div className="label">Last 7 days</div><div className="small muted" style={{ fontWeight: 600 }}>{avg ? `avg ${avg} kcal on ${logged.length} logged days` : 'nothing logged yet'}</div></div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 70 }}>
+          {days.map((x) => <div key={x.d} className="col" style={{ flex: 1, alignItems: 'center', gap: 4 }}><div style={{ width: '100%', height: Math.max(3, Math.min(60, (x.kcal / (settings.kcalBudget * 1.3)) * 60)), borderRadius: 4, background: x.kcal > settings.kcalBudget ? 'var(--danger)' : x.kcal ? 'var(--ok)' : 'var(--line)' }} /><div className="small muted" style={{ fontSize: 10 }}>{x.d.slice(8)}</div></div>)}
+        </div>
+        {weighIns.length > 1 && <div className="small muted">Weight {weighIns.at(-2)!.kg} → {weighIns.at(-1)!.kg} kg across the last two weigh-ins{(weekend?.beers ?? 0) + (weekend?.wine ?? 0) > 0 ? ` · ${weekend?.beers ?? 0} beers, ${weekend?.wine ?? 0} wine this week` : ''}</div>}
       </div>
 
       <div className="col" style={{ gap: 8 }}>

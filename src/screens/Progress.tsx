@@ -5,7 +5,9 @@ import { Icon } from '../ui/Icon';
 import { BodyMap } from '../ui/BodyMap';
 import { Bars, LineChart } from '../ui/Charts';
 import { addDays, fmtKg, fmtShort, isoWeekNumber, weekStart } from '../lib/dates';
-import { musclesHit, personalRecords, streak, topSets, weekTonnage } from '../lib/stats';
+import { musclesHit, personalRecords, topSets, weekTonnage } from '../lib/stats';
+import { deloadWarning, epley1RM, monthSummary, streakWithGrace } from '../lib/training';
+import { shareSummaryCard } from '../lib/share';
 import type { ScreenProps } from './types';
 
 export function Progress({ settings, exerciseId }: ScreenProps & { exerciseId?: string }) {
@@ -21,7 +23,9 @@ export function Progress({ settings, exerciseId }: ScreenProps & { exerciseId?: 
   const tops = topSets(sessions, selId);
   const weeks = Array.from({ length: 7 }, (_, i) => addDays(ws, (i - 6) * 7)).map((w) => ({ label: 'W' + isoWeekNumber(w), value: weekTonnage(sessions, w, exMap, bw), current: w === ws }));
   const thisWeek = weeks[6].value, prevWeek = weeks[5].value;
-  const st = streak(sessions, settings);
+  const st = streakWithGrace(sessions, settings);
+  const deload = deloadWarning(weeks.map((w) => w.value));
+  const month = monthSummary(sessions, weighIns, exMap, bw);
   const recent = [...sessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   const gain = tops.length > 1 ? tops[tops.length - 1].kg - tops[0].kg : 0;
 
@@ -32,6 +36,15 @@ export function Progress({ settings, exerciseId }: ScreenProps & { exerciseId?: 
         <div className="pill gold"><Icon name="flame" size={16} sw={2.5} />{st} day{st === 1 ? '' : 's'}</div>
       </div>
 
+      {deload && <div className="card" style={{ padding: '10px 14px', background: 'var(--acc-soft)', borderColor: 'var(--acc-line)' }}><div style={{ fontWeight: 600, fontSize: 14 }}>Four weeks of rising tonnage</div><div className="small muted">Consider a deload week: same lifts, 60 % of the weight, fewer sets.</div></div>}
+      <div className="card col" style={{ gap: 8 }}>
+        <div className="row between"><div className="label">This month</div><button className="pill sm" onClick={() => shareSummaryCard(month, settings.name)}>Share card</button></div>
+        <div className="grid3">
+          <div><div className="display num" style={{ fontSize: 26 }}>{month.sessions}</div><div className="small muted">sessions</div></div>
+          <div><div className="display num" style={{ fontSize: 26 }}>{fmtKg(month.tonnage)}</div><div className="small muted">hauled</div></div>
+          <div><div className="display num" style={{ fontSize: 26 }}>{month.weightChange === null ? '—' : (month.weightChange > 0 ? '+' : '') + month.weightChange.toFixed(1)}</div><div className="small muted">kg body</div></div>
+        </div>
+      </div>
       <div className="card col" style={{ gap: 12 }}>
         <div className="row between"><div className="label">Muscles hit · this week</div></div>
         <BodyMap hit={musclesHit(sessions, exMap, ws)} />
@@ -66,7 +79,7 @@ export function Progress({ settings, exerciseId }: ScreenProps & { exerciseId?: 
           {prs.slice(0, 12).map((p) => (
             <button key={p.exerciseId} className="item" style={{ width: '100%', textAlign: 'left' }} onClick={() => setSel(p.exerciseId)}>
               <div><div style={{ fontWeight: 600, fontSize: 15 }}>{exMap.get(p.exerciseId)?.name ?? p.exerciseId}</div><div className="small muted">{fmtShort(p.date)}</div></div>
-              <div className="col" style={{ alignItems: 'flex-end', gap: 2 }}><div className="display" style={{ fontSize: 22 }}>{p.kg} kg × {p.reps}</div><div className="small" style={{ fontWeight: 600, color: p.prevKg ? 'var(--ok)' : 'var(--muted)' }}>{p.prevKg ? `+${p.kg - p.prevKg} kg` : 'first'}</div></div>
+              <div className="col" style={{ alignItems: 'flex-end', gap: 2 }}><div className="display" style={{ fontSize: 22 }}>{p.kg} kg × {p.reps}</div><div className="small muted">1RM ≈ {epley1RM(p.kg, p.reps)} kg</div><div className="small" style={{ fontWeight: 600, color: p.prevKg ? 'var(--ok)' : 'var(--muted)' }}>{p.prevKg ? `+${p.kg - p.prevKg} kg` : 'first'}</div></div>
             </button>
           ))}
         </div>

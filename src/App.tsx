@@ -28,6 +28,7 @@ export default function App() {
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 2200); return () => clearTimeout(t); }, [toast]);
   useEffect(() => { window.scrollTo({ top: 0 }); }, [route.name]);
   const settings = useLiveQuery(() => db.settings.get('settings'), [], undefined);
+  useEffect(() => { const t = settings?.theme ?? 'auto'; document.documentElement.dataset.theme = t; }, [settings?.theme]);
   if (!ready || !settings) return <div className="app" style={{ display: 'grid', placeItems: 'center' }}><div className="display" style={{ fontSize: 28 }}>The Mine</div></div>;
 
   const go = (r: Route) => setRoute(r);

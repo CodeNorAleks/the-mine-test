@@ -11,7 +11,7 @@ import type { ScreenProps } from './types';
 const GROUPS: (MuscleGroup | 'All')[] = ['All', 'Back', 'Chest', 'Shoulders', 'Arms', 'Legs', 'Glutes', 'Abs', 'Cardio'];
 const GROUP_INK: Record<string, string> = { Back: '#2b3a52', Chest: '#6e4326', Shoulders: '#4a3a5c', Arms: '#4a3a5c', Legs: '#2f4d3a', Glutes: '#2f4d3a', Abs: '#4d4639', Cardio: '#4d4639' };
 
-function BlockRow({ be, ex, index, onChange, onRemove }: { be: BlockExercise; ex?: Exercise; index: number; onChange: (p: Partial<BlockExercise>) => void; onRemove: () => void }) {
+function BlockRow({ be, ex, exB, index, onChange, onRemove, onSetB, canSetB }: { be: BlockExercise; ex?: Exercise; exB?: Exercise; index: number; onChange: (p: Partial<BlockExercise>) => void; onRemove: () => void; onSetB: () => void; canSetB: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: 'blk-' + index, data: { kind: 'block', index } });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
   const num = (v: string) => (v === '' ? undefined : Math.max(0, Number(v)));
@@ -22,6 +22,10 @@ function BlockRow({ be, ex, index, onChange, onRemove }: { be: BlockExercise; ex
         <div className="display" style={{ fontSize: 18, color: 'var(--muted)', width: 18 }}>{index + 1}</div>
         <div style={{ flex: 1, fontWeight: 600, fontSize: 14, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex?.name ?? be.exerciseId}</div>
         <button onClick={onRemove} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}><Icon name="x" size={14} sw={2.5} /></button>
+      </div>
+      <div className="row small" style={{ paddingLeft: 30, gap: 6, minHeight: 20 }}>
+        {be.weekB ? <><span className="label" style={{ fontSize: 9, color: 'var(--acc)' }}>Week B</span><span style={{ fontWeight: 600 }}>{exB?.name ?? be.weekB.exerciseId}</span><span className="muted">{be.weekB.sets}×{be.weekB.reps}{be.weekB.targetKg ? ` · ${be.weekB.targetKg} kg` : ''}</span><button className="muted" onClick={() => onChange({ weekB: undefined })}><Icon name="x" size={12} /></button></>
+          : canSetB ? <button style={{ color: 'var(--acc)', fontWeight: 600 }} onClick={onSetB}>Use picked lift as week-B alternative</button> : null}
       </div>
       <div className="row" style={{ gap: 6, paddingLeft: 30, paddingBottom: 6 }}>
         {(['sets', 'reps', 'targetKg'] as const).map((k) => (
@@ -58,6 +62,8 @@ function DropZone({ armed, count, onTap }: { armed: boolean; count: number; onTa
 export function BlockEditor({ go, blockId, toast }: ScreenProps & { blockId: string }) {
   const block = useLiveQuery(() => db.blocks.get(blockId), [blockId]);
   const exercises = useLiveQuery(() => db.exercises.orderBy('name').toArray(), []) ?? [];
+  const programs = useLiveQuery(() => db.programs.toArray(), []) ?? [];
+  const [showPrograms, setShowPrograms] = useState(false);
   const [filter, setFilter] = useState<MuscleGroup | 'All'>('All');
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<string | null>(null);
@@ -100,6 +106,11 @@ export function BlockEditor({ go, blockId, toast }: ScreenProps & { blockId: str
       if (to !== d.index) await save(arrayMove(block.exercises, d.index!, to));
     }
   };
+  const importDay = async (name: string, exs: { exerciseId: string; sets: number; reps: number }[], replace: boolean) => {
+    const items: BlockExercise[] = exs.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets, reps: e.reps }));
+    const merged = replace ? items : [...block.exercises, ...items.filter((e) => !inBlock.has(e.exerciseId))];
+    await save(merged); if (replace) await db.blocks.update(blockId, { name }); toast(`${replace ? 'Replaced with' : 'Added'} ${name}`); setShowPrograms(false);
+  };
   const rename = async () => { const n = prompt('Block name', block.name); if (n) await db.blocks.update(blockId, { name: n }); };
   const remove = async () => { if (confirm(`Delete block "${block.name}"?`)) { await db.blocks.delete(blockId); go({ name: 'plan' }); } };
   const newLift = async () => {
@@ -124,9 +135,11 @@ export function BlockEditor({ go, blockId, toast }: ScreenProps & { blockId: str
           <div style={{ background: 'var(--card)', borderRadius: 12, padding: '6px 12px' }}>
             <SortableContext items={block.exercises.map((_, i) => 'blk-' + i)} strategy={verticalListSortingStrategy}>
               {block.exercises.map((be, i) => (
-                <BlockRow key={be.exerciseId} be={be} ex={exMap.get(be.exerciseId)} index={i}
+                <BlockRow key={be.exerciseId} be={be} ex={exMap.get(be.exerciseId)} exB={be.weekB ? exMap.get(be.weekB.exerciseId) : undefined} index={i}
                   onChange={(p) => save(block.exercises.map((x, j) => (j === i ? { ...x, ...p } : x)))}
-                  onRemove={() => save(block.exercises.filter((_, j) => j !== i))} />
+                  onRemove={() => save(block.exercises.filter((_, j) => j !== i))}
+                  canSetB={!!picked && picked !== be.exerciseId}
+                  onSetB={() => { if (!picked) return; save(block.exercises.map((x, j) => (j === i ? { ...x, weekB: { exerciseId: picked, sets: x.sets, reps: x.reps, targetKg: x.targetKg } } : x))); setPicked(null); toast('Week-B alternative set'); }} />
               ))}
             </SortableContext>
             {!block.exercises.length && <div className="muted small" style={{ padding: 8 }}>Empty — add lifts from the register below.</div>}
@@ -134,6 +147,18 @@ export function BlockEditor({ go, blockId, toast }: ScreenProps & { blockId: str
           <DropZone armed={!!picked} count={block.exercises.length} onTap={() => picked && add(picked)} />
         </div>
 
+        <div className="row between"><div className="label">Programs</div><button className="small" style={{ color: 'var(--acc)', fontWeight: 600 }} onClick={() => setShowPrograms(!showPrograms)}>{showPrograms ? 'Hide' : `Browse ${programs.length}`}</button></div>
+        {showPrograms && programs.map((pr) => (
+          <div key={pr.id} className="card col" style={{ gap: 8, padding: '12px 14px' }}>
+            <div><div style={{ fontWeight: 600 }}>{pr.name}</div><div className="small muted">{pr.note}</div></div>
+            {pr.days.map((d) => (
+              <div key={d.name} className="row between" style={{ gap: 8 }}>
+                <div style={{ minWidth: 0 }}><div className="small" style={{ fontWeight: 600 }}>{d.name}</div><div className="small muted" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.exercises.map((e) => exMap.get(e.exerciseId)?.name ?? e.exerciseId).join(' · ')}</div></div>
+                <div className="row" style={{ gap: 4, flexShrink: 0 }}><button className="pill sm" onClick={() => importDay(d.name, d.exercises, false)}>Add</button><button className="pill sm on" onClick={() => confirm(`Replace this block's lifts with "${d.name}"?`) && importDay(d.name, d.exercises, true)}>Replace</button></div>
+              </div>
+            ))}
+          </div>
+        ))}
         <div className="row between"><div className="label">Lift register · {exercises.length}</div><button className="small" style={{ color: 'var(--acc)', fontWeight: 600 }} onClick={newLift}>+ New lift</button></div>
         <div className="small muted">{picked ? `Tap the drop zone to add "${exMap.get(picked)?.name}"` : 'Drag a lift into the block (hold on touch), or tap a lift then tap the drop zone.'}</div>
         <input className="search" placeholder="Search lifts…" value={q} onChange={(e) => setQ(e.target.value)} />

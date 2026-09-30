@@ -3,7 +3,8 @@ import { db, uid } from '../db/db';
 import { WEEKDAYS } from '../db/types';
 import { Icon } from '../ui/Icon';
 import { fmtKg, fmtLong, today, weekDates, weekStart, weekdayOf, addDays } from '../lib/dates';
-import { gymStatus, sessionTonnage, streak, weekTonnage } from '../lib/stats';
+import { gymStatus, sessionTonnage, weekTonnage } from '../lib/stats';
+import { isWeekB, streakWithGrace, milestone } from '../lib/training';
 import type { ScreenProps } from './types';
 import { useState } from 'react';
 
@@ -33,7 +34,9 @@ export function Today({ go, settings, toast }: ScreenProps) {
   const weight = weighIns.at(-1)?.kg;
   const pct = weight ? Math.max(0, Math.min(1, (settings.startKg - weight) / (settings.startKg - settings.goalKg))) : 0;
   const gym = gymStatus(settings);
-  const st = streak(sessions, settings);
+  const st = streakWithGrace(sessions, settings);
+  const allTime = sessions.reduce((t, x) => t + sessionTonnage(x, exMap, bw), 0);
+  const ms = milestone(allTime);
   const stepDays = steps.filter((s) => s.date >= ws && s.date <= addDays(ws, 6) && s.steps >= settings.stepGoal).length;
   const todaySteps = steps.find((s) => s.date === t)?.steps;
 
@@ -48,13 +51,17 @@ export function Today({ go, settings, toast }: ScreenProps) {
     await db.sessions.update(s.id, { warmup: { ...s.warmup, [w]: !s.warmup[w] } });
   };
 
+  const buildSets = () => {
+    const b = isWeekB(t);
+    return block!.exercises.map((be) => (b && be.weekB ? be.weekB : be)).flatMap((be) => Array.from({ length: be.sets }, (_, i) => ({ exerciseId: be.exerciseId, setNo: i + 1, kg: be.targetKg ?? 0, reps: be.reps, done: false })));
+  };
   const start = async () => {
     if (!block) return toast('No workout planned today — set one in Plan');
     if (!todaySession) {
-      const sets = block.exercises.flatMap((be) => Array.from({ length: be.sets }, (_, i) => ({ exerciseId: be.exerciseId, setNo: i + 1, kg: be.targetKg ?? 0, reps: be.reps, done: false })));
+      const sets = buildSets();
       await db.sessions.add({ id: uid(), date: t, blockId: block.id, blockName: block.name, startedAt: Date.now(), warmup: {}, sets });
     } else if (!todaySession.sets.length) {
-      const sets = block.exercises.flatMap((be) => Array.from({ length: be.sets }, (_, i) => ({ exerciseId: be.exerciseId, setNo: i + 1, kg: be.targetKg ?? 0, reps: be.reps, done: false })));
+      const sets = buildSets();
       await db.sessions.update(todaySession.id, { sets, endedAt: undefined });
     }
     go({ name: 'workout' });
@@ -72,7 +79,7 @@ export function Today({ go, settings, toast }: ScreenProps) {
     <div className="screen">
       <div className="row between" style={{ paddingTop: 20 }}>
         <div className="row" style={{ gap: 10 }}>
-          <img src={import.meta.env.BASE_URL + 'lifter.png'} alt="" style={{ width: 36, height: 36, mixBlendMode: 'multiply' }} />
+          <img className="mark" src={import.meta.env.BASE_URL + 'lifter.png'} alt="" style={{ width: 36, height: 36, mixBlendMode: 'multiply' }} />
           <div className="display" style={{ fontSize: 24, letterSpacing: '0.04em' }}>The Mine</div>
         </div>
         <div className="row" style={{ gap: 6 }}>
@@ -111,7 +118,7 @@ export function Today({ go, settings, toast }: ScreenProps) {
         <button className="btn acc" onClick={start}>
           <Icon name="play" size={22} sw={2.5} />
           <span>{open ? 'Continue workout' : todaySession?.endedAt ? 'Workout done · reopen' : 'Start workout'}</span>
-          <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.75, letterSpacing: '0.08em' }}>{block.exercises.length} lifts</span>
+          <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.75, letterSpacing: '0.08em' }}>{block.exercises.length} lifts{isWeekB(t) && block.exercises.some((e) => e.weekB) ? ' · week B' : ''}</span>
         </button>
       )}
 
@@ -138,6 +145,13 @@ export function Today({ go, settings, toast }: ScreenProps) {
           <div className="small muted" style={{ fontWeight: 600 }}>{lastWeek ? `last week ${fmtKg(lastWeek)}` : 'first week logged'}</div>
         </div>
       </div>
+      {allTime > 0 && (
+        <div className="card col" style={{ gap: 8, padding: '12px 16px' }}>
+          <div className="row between"><div className="label">Hauled all time</div><div className="display num" style={{ fontSize: 22 }}>{fmtKg(allTime)}</div></div>
+          <div className="bar"><i style={{ width: `${Math.min(100, ms.pct * 100)}%` }} /></div>
+          <div className="small muted">{ms.reached ? `Past ${ms.reached.label}. ` : ''}{ms.next ? `Next: ${ms.next.label}` : 'Every milestone cleared.'}</div>
+        </div>
+      )}
 
       <div className="grid2">
         <button className="card col" style={{ textAlign: 'left' }} onClick={() => go({ name: 'body' })}>

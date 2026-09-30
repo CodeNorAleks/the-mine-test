@@ -21,7 +21,15 @@ export interface BlockExercise {
   sets: number;
   reps: number;
   targetKg?: number;
+  /** Week-B alternative (used on even ISO weeks when set), e.g. conventional deadlift instead of trap bar. */
+  weekB?: { exerciseId: string; sets: number; reps: number; targetKg?: number };
 }
+
+export interface ProgramExercise { exerciseId: string; sets: number; reps: number; repsLabel: string }
+export interface ProgramDay { name: string; exercises: ProgramExercise[] }
+export interface Program { id: string; name: string; source: string; url?: string; note?: string; days: ProgramDay[] }
+
+export interface Measurement { id: string; date: string; waist?: number; chest?: number; arm?: number; thigh?: number; hips?: number }
 
 /** A workout block (template) you drag onto days. */
 export interface Block {
@@ -83,4 +91,7 @@ export interface Settings {
   warmup: string[];
   gym: { name: string; address: string; url: string; hours: { days: string; open: string; close: string }[] };
   restSeconds: number;
+  proteinTarget?: number;     // g/day
+  theme?: 'auto' | 'light' | 'dark';
+  graceDays?: number;         // missed planned days allowed per rolling 7 days before the streak breaks
 }

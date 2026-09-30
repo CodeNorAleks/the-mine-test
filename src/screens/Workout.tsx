@@ -5,6 +5,7 @@ import type { SetLog } from '../db/types';
 import { Icon } from '../ui/Icon';
 import { fmtKg, mmss, today } from '../lib/dates';
 import { lastPerformance, sessionTonnage } from '../lib/stats';
+import { epley1RM, isBarbell, plates, progression, warmupRamp } from '../lib/training';
 import type { ScreenProps } from './types';
 
 export function Workout({ go, settings, toast }: ScreenProps) {
@@ -16,6 +17,7 @@ export function Workout({ go, settings, toast }: ScreenProps) {
   const [exIdx, setExIdx] = useState(0);
   const [rest, setRest] = useState<number | null>(null);
   const [focus, setFocus] = useState<{ setNo: number; field: 'kg' | 'reps' } | null>(null);
+  const [showRamp, setShowRamp] = useState(false);
   useEffect(() => { setFocus(null); }, [exIdx]);
   const [tick, setTick] = useState(0);
   const restEnd = useRef<number | null>(null);
@@ -39,6 +41,9 @@ export function Workout({ go, settings, toast }: ScreenProps) {
   const tonnage = sessionTonnage(session, exMap, bw);
   const last = lastPerformance(sessions.filter((s) => s.endedAt), exId, session.date);
   const curSet = sets.find((s) => !s.done)?.setNo;
+  const barbell = isBarbell(ex);
+  const topKg = Math.max(0, ...sets.map((x) => x.kg));
+  const sugg = progression(sessions, exId, ex, sets[0]?.reps ?? 0, session.date);
   const doneCount = session.sets.filter((s) => s.done).length;
 
   const update = (setNo: number, patch: Partial<SetLog>) =>
@@ -62,6 +67,7 @@ export function Workout({ go, settings, toast }: ScreenProps) {
     db.sessions.update(session.id, { sets: session.sets.map((x) => { if (x.exerciseId !== exId || x.done) return x; const p = prev[x.setNo - 1] ?? prev[prev.length - 1]; return { ...x, kg: p.kg, reps: p.reps }; }) });
     toast('Filled from last time');
   };
+  const applySuggestion = () => { if (!sugg) return; db.sessions.update(session.id, { sets: session.sets.map((x) => (x.exerciseId === exId && !x.done ? { ...x, kg: sugg.to } : x)) }); toast(`Set to ${sugg.to} kg`); };
   const addSet = () => { const lastSet = sets.at(-1); db.sessions.update(session.id, { sets: [...session.sets, { exerciseId: exId, setNo: sets.length + 1, kg: lastSet?.kg ?? 0, reps: lastSet?.reps ?? 10, done: false }] }); };
   const removeSet = () => { if (sets.length <= 1) return; db.sessions.update(session.id, { sets: session.sets.filter((s) => !(s.exerciseId === exId && s.setNo === sets.length)) }); };
   const finish = async () => { await db.sessions.update(session.id, { endedAt: Date.now() }); toast(`Session saved · ${fmtKg(tonnage)}`); go({ name: 'today' }); };
@@ -89,6 +95,24 @@ export function Workout({ go, settings, toast }: ScreenProps) {
         </div>
       </div>
 
+      {sugg && !session.endedAt && (
+        <div className="card row between" style={{ padding: '10px 14px', background: 'var(--acc-soft)', borderColor: 'var(--acc-line)' }}>
+          <div><div style={{ fontWeight: 600, fontSize: 14 }}>Hit {sets[0]?.reps} reps twice at {sugg.from} kg</div><div className="small muted">Time to add weight: {sugg.from} → {sugg.to} kg</div></div>
+          <button className="btn acc sm" onClick={applySuggestion}>+{sugg.inc} kg</button>
+        </div>
+      )}
+      {barbell && topKg > 20 && (
+        <div className="row between small" style={{ gap: 8 }}>
+          <button className="pill sm" onClick={() => setShowRamp(!showRamp)}><Icon name="trend" size={14} /> Warm-up ramp</button>
+          <span className="muted" style={{ fontWeight: 600 }}>1RM est. {epley1RM(topKg, sets.find((x) => x.kg === topKg)?.reps ?? 1)} kg</span>
+        </div>
+      )}
+      {showRamp && barbell && (
+        <div className="card list" style={{ padding: '4px 16px' }}>
+          {warmupRamp(topKg).map((w, i) => <div key={i} className="item" style={{ minHeight: 40 }}><span style={{ fontWeight: 600 }}>{w.kg} kg × {w.reps}</span><span className="small muted num">{plates(w.kg)?.join(' + ') || 'bar'} / side</span></div>)}
+          <div className="item" style={{ minHeight: 40 }}><span style={{ fontWeight: 700, color: 'var(--acc)' }}>{topKg} kg top set</span><span className="small muted num">{plates(topKg)?.join(' + ') ?? '—'} / side</span></div>
+        </div>
+      )}
       <div className="card" style={{ padding: '12px 16px 8px' }}>
         <div className="setrow" style={{ height: 28 }}><div className="label" style={{ textAlign: 'center' }}>Set</div><div className="label" style={{ textAlign: 'center' }}>{ex?.bodyweight ? 'kg (+)' : 'kg'}</div><div className="label" style={{ textAlign: 'center' }}>Reps</div><div /></div>
         {sets.map((s) => {
@@ -110,6 +134,9 @@ export function Workout({ go, settings, toast }: ScreenProps) {
                   ))}
                   <input className="field num" style={{ width: 56, height: 48, textAlign: 'center', fontSize: 16, padding: 0 }} inputMode="decimal" placeholder="…" onChange={(e) => update(s.setNo, { [f]: num(e.target.value) } as Partial<SetLog>)} />
                 </div>
+              )}
+              {f === 'kg' && barbell && s.kg >= 20 && (
+                <div className="small muted num" style={{ padding: '0 0 10px 44px', fontWeight: 600 }}>Per side: {plates(s.kg)?.join(' + ') || 'empty bar'}{plates(s.kg) === null ? ' (not loadable in 1.25s)' : ''}</div>
               )}
             </div>
           );

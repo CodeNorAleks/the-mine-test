@@ -56,11 +56,14 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
       <div className="card col" style={{ gap: 10 }}>
         <div className="label">Food</div>
         <div className="grid3"><F label="kcal / day" k="kcalBudget" /><F label="Beers / weekend" k="beerBudget" /><F label="Wine btl / weekend" k="wineBudget" /></div>
+        <F label="Protein g / day (default 2 × goal kg)" k="proteinTarget" />
       </div>
 
       <div className="card col" style={{ gap: 10 }}>
         <div className="label">Training</div>
         <div className="grid3"><F label="Rest (sec)" k="restSeconds" /><F label="Step goal" k="stepGoal" /><F label="Step days / wk" k="stepDaysGoal" /></div>
+        <div className="grid2"><F label="Streak grace days / week" k="graceDays" />
+          <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Theme</span><select className="field" value={s.theme ?? 'auto'} onChange={(e) => setS({ ...s, theme: e.target.value as Settings['theme'] })}><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select></label></div>
         <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Warm-up (comma separated)</span><input className="field" value={warm} onChange={(e) => setWarm(e.target.value)} /></label>
       </div>
 
