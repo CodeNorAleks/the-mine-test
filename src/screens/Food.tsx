@@ -3,15 +3,18 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, uid } from '../db/db';
 import { Icon } from '../ui/Icon';
 import { Ring } from '../ui/Charts';
-import { addDays, fmtLong, today, weekStart } from '../lib/dates';
+import { addDays, fmtLong, today, weekStart, weekdayOf } from '../lib/dates';
+import { MEALS, SLOTS, SLOT_STYLE, mealMacros } from '../db/meals';
 import type { ScreenProps } from './types';
 
-export function Food({ settings, toast }: ScreenProps) {
+export function Food({ settings, toast, go }: ScreenProps) {
   const t = today();
   const ws = weekStart();
   const meals = useLiveQuery(() => db.meals.orderBy('order').toArray(), []) ?? [];
   const entries = useLiveQuery(() => db.food.where('date').equals(t).toArray(), [t]) ?? [];
   const weekend = useLiveQuery(() => db.weekend.get(ws), [ws]);
+  const plan = useLiveQuery(() => db.mealPlans.get(ws), [ws]);
+  const planned = SLOTS.map((s) => ({ slot: s, meal: MEALS.find((m) => m.id === plan?.days[weekdayOf(t)]?.[s]) })).filter((x) => x.meal);
   const weekFood = useLiveQuery(() => db.food.where('date').between(addDays(t, -6), t, true, true).toArray(), [t]) ?? [];
   const weighIns = useLiveQuery(() => db.weighIns.orderBy('date').toArray(), []) ?? [];
   const proteinTarget = settings.proteinTarget ?? Math.round(settings.goalKg * 2);
@@ -66,7 +69,22 @@ export function Food({ settings, toast }: ScreenProps) {
       </div>
 
       <div className="col" style={{ gap: 8 }}>
-        <div className="label">Meals · tap to log preset</div>
+        <div className="row between"><div className="label">Planned today</div><button className="small" style={{ color: 'var(--acc)', fontWeight: 600 }} onClick={() => go({ name: 'meals' })}>Meal plan →</button></div>
+        {planned.length === 0 ? <button className="card row between" style={{ padding: '12px 16px', textAlign: 'left' }} onClick={() => go({ name: 'meals' })}><div><div style={{ fontWeight: 600 }}>No meals planned for today</div><div className="small muted">Drag meals onto the week and get a shopping list.</div></div><Icon name="chev" size={18} /></button>
+        : <div className="card list">
+          {planned.map(({ slot, meal }) => { const mm = mealMacros(meal!); const done = entries.some((e) => e.name === meal!.name); return (
+            <div key={slot} className="item" style={{ minHeight: 60 }}>
+              <button className="row" style={{ gap: 12, flex: 1, textAlign: 'left' }} onClick={() => logMeal({ name: meal!.name, kcal: Math.round(mm.kcal), protein: Math.round(mm.protein) })}>
+                <span className={'tick' + (done ? ' done' : '')} style={{ width: 36, height: 36, color: done ? '#fff' : 'var(--muted)' }}>{done ? <Icon name="check" size={18} sw={3} /> : <Icon name="plus" size={18} sw={2.5} />}</span>
+                <div><div style={{ fontWeight: 600, fontSize: 15 }}>{meal!.name}</div><div className="small" style={{ color: SLOT_STYLE[slot].ink, fontWeight: 600 }}>{slot} · {Math.round(mm.protein)} g protein</div></div>
+              </button>
+              <div className="display num" style={{ fontSize: 22, color: done ? undefined : 'var(--muted)' }}>{Math.round(mm.kcal)}</div>
+            </div>); })}
+          {planned.length > 0 && <div className="item" style={{ minHeight: 44 }}><span className="small muted">Planned total</span><span className="small num" style={{ fontWeight: 600 }}>{Math.round(planned.reduce((a, x) => a + mealMacros(x.meal!).kcal, 0))} kcal · {Math.round(planned.reduce((a, x) => a + mealMacros(x.meal!).protein, 0))} g</span></div>}
+        </div>}
+      </div>
+      <div className="col" style={{ gap: 8 }}>
+        <div className="label">Presets · tap to log</div>
         <div className="card list">
           {meals.map((m) => {
             const done = entries.some((e) => e.name === m.name);

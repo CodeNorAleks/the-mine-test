@@ -10,10 +10,12 @@ import { Progress } from './screens/Progress';
 import { Body } from './screens/Body';
 import { Food } from './screens/Food';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { MealPlan } from './screens/MealPlan';
+import { Shopping } from './screens/Shopping';
 
 export type Route =
   | { name: 'today' } | { name: 'plan' } | { name: 'block'; id: string } | { name: 'workout' }
-  | { name: 'progress'; exerciseId?: string } | { name: 'body' } | { name: 'food' } | { name: 'settings' };
+  | { name: 'progress'; exerciseId?: string } | { name: 'body' } | { name: 'food' } | { name: 'settings' } | { name: 'meals' } | { name: 'shopping'; weekStart: string };
 
 const NAV: { key: Route['name']; icon: string; label: string }[] = [
   { key: 'today', icon: 'home', label: 'Today' }, { key: 'plan', icon: 'cal', label: 'Plan' }, { key: 'workout', icon: 'dumbbell', label: 'Workout' },
@@ -32,11 +34,11 @@ export default function App() {
   if (!ready || !settings) return <div className="app" style={{ display: 'grid', placeItems: 'center' }}><div className="display" style={{ fontSize: 28 }}>The Mine</div></div>;
 
   const go = (r: Route) => setRoute(r);
-  const active = route.name === 'block' ? 'plan' : route.name === 'settings' ? 'today' : route.name;
+  const active = route.name === 'block' ? 'plan' : route.name === 'settings' ? 'today' : route.name === 'meals' || route.name === 'shopping' ? 'food' : route.name;
   const props = { go, settings, toast: setToast };
   return (
     <div className="app">
-      <div key={route.name + ('id' in route ? route.id : '')} className="fade">
+      <div key={route.name + ('id' in route ? route.id : '') + ('weekStart' in route ? route.weekStart : '')} className="fade">
         {route.name === 'today' && <Today {...props} />}
         {route.name === 'plan' && <Plan {...props} />}
         {route.name === 'block' && <BlockEditor {...props} blockId={route.id} />}
@@ -45,6 +47,8 @@ export default function App() {
         {route.name === 'body' && <Body {...props} />}
         {route.name === 'food' && <Food {...props} />}
         {route.name === 'settings' && <SettingsScreen {...props} />}
+        {route.name === 'meals' && <MealPlan {...props} />}
+        {route.name === 'shopping' && <Shopping {...props} weekStart={route.weekStart} />}
       </div>
       <nav className="nav"><div className="nav-inner">
         {NAV.map((n) => (

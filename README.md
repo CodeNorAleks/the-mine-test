@@ -50,11 +50,11 @@ public/       lifter illustration + app icons
 
 ## v1.1 (test branch)
 
-Easier input (steppers, copy-down on tick, same-as-last), plate calculator, progression suggestions, warm-up ramp, estimated 1RM, week A/B alternatives per lift, imported fitnessphantom programs (import a day as a block), deload warning, monthly summary share card, mining milestones, streak grace days, body measurements, 7-day smoothed weight trend, protein target, last-7-days food view, dark mode, JSON backup.
+Meal planning: 22 meals that fit a 2 200 kcal / high-protein day, drag onto breakfast/lunch/dinner/snack slots per day (or auto-fill), daily kcal + protein totals, one-tap logging of planned meals, automatic shopping list in Norwegian pack sizes grouped by aisle with a "have at home" pantry and share-as-text. Easier input (steppers, copy-down on tick, same-as-last), plate calculator, progression suggestions, warm-up ramp, estimated 1RM, week A/B alternatives per lift, imported fitnessphantom programs (import a day as a block), deload warning, monthly summary share card, mining milestones, streak grace days, body measurements, 7-day smoothed weight trend, protein target, last-7-days food view, dark mode, JSON backup.
 
 ## To do
 
 - Cloud sync between devices (Firebase)
 - fitnessprogramer.com directory with GIFs
-- Barcode / food search (Open Food Facts)
+- Kassalapp prices per chain (Kiwi / Meny / Coop) on the shopping list, barcode lookup
 - Illustrated muscle map in the same hand as the logo

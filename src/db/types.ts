@@ -95,3 +95,6 @@ export interface Settings {
   theme?: 'auto' | 'light' | 'dark';
   graceDays?: number;         // missed planned days allowed per rolling 7 days before the streak breaks
 }
+
+export interface MealPlan { weekStart: string; days: Record<Weekday, Partial<Record<'breakfast' | 'lunch' | 'dinner' | 'snack', string>>> }
+export interface Pantry { id: 'pantry'; have: string[] }   // ingredient ids ticked as "have at home"
