@@ -4,6 +4,7 @@ import { WEEKDAYS } from '../db/types';
 import { Icon } from '../ui/Icon';
 import { fmtKg, fmtLong, today, weekDates, weekStart, weekdayOf, addDays } from '../lib/dates';
 import { gymStatus, sessionTonnage, weekTonnage } from '../lib/stats';
+import { GYM } from '../db/gyms';
 import { isWeekB, streakWithGrace, milestone } from '../lib/training';
 import type { ScreenProps } from './types';
 import { useState } from 'react';
@@ -33,7 +34,8 @@ export function Today({ go, settings, toast }: ScreenProps) {
   const kcal = food.reduce((a, f) => a + f.kcal, 0);
   const weight = weighIns.at(-1)?.kg;
   const pct = weight ? Math.max(0, Math.min(1, (settings.startKg - weight) / (settings.startKg - settings.goalKg))) : 0;
-  const gym = gymStatus(settings);
+  const gymInfo = settings.gymId ? GYM.get(settings.gymId) : (settings.gym?.name ? { chain: '', name: settings.gym.name, address: settings.gym.address, hours: settings.gym.hours, note: undefined } : undefined);
+  const gym = gymInfo ? gymStatus(gymInfo.hours) : null;
   const st = streakWithGrace(sessions, settings);
   const allTime = sessions.reduce((t, x) => t + sessionTonnage(x, exMap, bw), 0);
   const ms = milestone(allTime);
@@ -182,17 +184,22 @@ export function Today({ go, settings, toast }: ScreenProps) {
         </div>
       </div>
 
-      <div className="card col" style={{ gap: 10 }}>
-        <div className="row between">
-          <div><div style={{ fontWeight: 600, fontSize: 16 }}>{settings.gym.name}</div><div className="small muted">{settings.gym.address}</div></div>
-          <div className={'pill sm ' + (gym.open ? 'ok' : '')} style={{ fontSize: 13 }}><i className="dot" style={{ background: gym.open ? 'var(--ok)' : 'var(--danger)' }} />{gym.open ? `Open · closes ${gym.closes}` : `Closed · opens ${gym.opens}`}</div>
-        </div>
-        <div className="grid3">
-          {settings.gym.hours.map((h) => (
-            <div key={h.days} className="inner"><div className="label" style={{ fontSize: 10 }}>{h.days}</div><div className="small num" style={{ fontWeight: 600, marginTop: 2 }}>{h.open}–{h.close}</div></div>
-          ))}
-        </div>
-      </div>
+      {gymInfo && gym ? (
+        <button className="card col" style={{ gap: 10, textAlign: 'left' }} onClick={() => go({ name: 'settings' })}>
+          <div className="row between">
+            <div><div style={{ fontWeight: 600, fontSize: 16 }}>{gymInfo.chain ? gymInfo.chain + ' ' : ''}{gymInfo.name}</div><div className="small muted">{gymInfo.address}</div></div>
+            <div className={'pill sm ' + (gym.open ? 'ok' : '')} style={{ fontSize: 13 }}><i className="dot" style={{ background: gym.open ? 'var(--ok)' : 'var(--danger)' }} />{gym.open ? `Open · closes ${gym.closes}` : `Closed · opens ${gym.opens}`}</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, gymInfo.hours.length)}, minmax(0, 1fr))`, gap: 8 }}>
+            {gymInfo.hours.map((h) => (
+              <div key={h.days} className="inner" style={{ outline: gym.today === h ? '1px solid var(--acc)' : 'none' }}><div className="label" style={{ fontSize: 10 }}>{h.days}</div><div className="small num" style={{ fontWeight: 600, marginTop: 2 }}>{h.open}–{h.close === '23:59' ? '24:00' : h.close}</div></div>
+            ))}
+          </div>
+          {gymInfo.note && <div className="small muted">{gymInfo.note}</div>}
+        </button>
+      ) : (
+        <button className="card row between" style={{ padding: '12px 16px', textAlign: 'left' }} onClick={() => go({ name: 'settings' })}><div><div style={{ fontWeight: 600 }}>Choose your gym</div><div className="small muted">SATS, EVO or Fresh Fitness in Oslo — opening hours show here.</div></div><Icon name="chev" size={18} /></button>
+      )}
       <div style={{ height: 4 }}>{WEEKDAYS.length ? null : null}</div>
     </div>
   );

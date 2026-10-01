@@ -87,12 +87,24 @@ export function lastPerformance(sessions: Session[], exerciseId: string, beforeD
   return { date: prior.date, kg: top.kg, reps: top.reps, sets: sets.length };
 }
 
-export function gymStatus(settings: Settings, now = new Date()) {
-  const wd = now.getDay(); // 0 Sun
-  const idx = wd >= 1 && wd <= 4 ? 0 : wd === 5 ? 1 : 2;
-  const h = settings.gym.hours[idx];
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+/** Parse "Mon–Thu", "Sat–Sun", "Mon", "Mon, Thu" into weekday indexes (Mon = 0). */
+export function parseDays(spec: string): number[] {
+  const out = new Set<number>();
+  for (const part of spec.split(',')) {
+    const m = part.trim().match(/^(\w{3})\s*[–-]\s*(\w{3})$/);
+    if (m) { const a = DAYS.indexOf(m[1]), b = DAYS.indexOf(m[2]); if (a >= 0 && b >= 0) for (let i = a; i <= b; i++) out.add(i); }
+    else { const i = DAYS.indexOf(part.trim().slice(0, 3)); if (i >= 0) out.add(i); }
+  }
+  return [...out];
+}
+export function gymStatus(hours: { days: string; open: string; close: string }[], now = new Date()) {
+  const wd = (now.getDay() + 6) % 7;
+  const h = hours.find((x) => parseDays(x.days).includes(wd)) ?? hours[0];
+  if (!h) return { open: false, closes: '', opens: '', today: null };
   const mins = now.getHours() * 60 + now.getMinutes();
   const toMin = (t: string) => { const [a, b] = t.split(':').map(Number); return a * 60 + b; };
-  const open = mins >= toMin(h.open) && mins < toMin(h.close);
-  return { open, closes: h.close, opens: h.open };
+  const closeMin = h.close === '24:00' ? 1440 : toMin(h.close);
+  const open = mins >= toMin(h.open) && mins < closeMin;
+  return { open, closes: h.close === '23:59' ? '24:00' : h.close, opens: h.open, today: h };
 }

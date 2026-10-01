@@ -1,3 +1,5 @@
+export interface GymHours { days: string; open: string; close: string }
+
 export type MuscleGroup =
   | 'Back' | 'Chest' | 'Shoulders' | 'Arms' | 'Legs' | 'Glutes' | 'Abs' | 'Cardio';
 
@@ -89,7 +91,8 @@ export interface Settings {
   weighInDay: Weekday;
   defaultWeek: Record<Weekday, string | null>;
   warmup: string[];
-  gym: { name: string; address: string; url: string; hours: { days: string; open: string; close: string }[] };
+  gym: { name: string; address: string; url: string; hours: GymHours[] };
+  gymId?: string;             // id in src/db/gyms.ts; overrides `gym` when set
   restSeconds: number;
   proteinTarget?: number;     // g/day
   theme?: 'auto' | 'light' | 'dark';

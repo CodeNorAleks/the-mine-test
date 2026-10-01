@@ -24,7 +24,7 @@ npm run preview
 
 ## What's in it
 
-- **Today** — streak, week strip, warm-up checklist, start/continue workout, kg lifted today and this week, weight and calories, steps, SATS Colosseum opening hours (open/closed now).
+- **Today** — streak, week strip, warm-up checklist, start/continue workout, kg lifted today and this week, weight and calories, steps, your gym's opening hours (pick any SATS, EVO or Fresh Fitness in Oslo in Settings; open/closed now).
 - **Plan** — weekly schedule. Drag workout blocks onto days (hold on touch), or tap a block then tap a day. Reset to default, or save the current week as your default. Pencil opens the block editor.
 - **Block editor** — the lift register. Drag lifts into the block (or tap a lift then the drop zone), drag the grip to reorder, set sets / reps / target kg, × removes. Filter by muscle group, search, `+ New lift`.
 - **Workout** — set-by-set logging (kg, reps, tick), rest timer with +30 / Skip (vibrates on phones when rest ends), running tonnage, last-time performance per lift, add/remove sets, finish early, discard.

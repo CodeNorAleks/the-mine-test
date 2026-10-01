@@ -4,10 +4,13 @@ import type { Settings, Weekday } from '../db/types';
 import { WEEKDAYS } from '../db/types';
 import { Icon } from '../ui/Icon';
 import type { ScreenProps } from './types';
+import { GYMS } from '../db/gyms';
 
 export function SettingsScreen({ go, settings, toast }: ScreenProps) {
   const [s, setS] = useState<Settings>(settings);
   const [warm, setWarm] = useState(settings.warmup.join(', '));
+  const [gq, setGq] = useState('');
+  const [chain, setChain] = useState<'All' | 'SATS' | 'EVO' | 'Fresh Fitness'>('All');
   const num = (k: keyof Settings) => (e: React.ChangeEvent<HTMLInputElement>) => setS({ ...s, [k]: Number(e.target.value.replace(',', '.')) || 0 });
   const save = async () => {
     await db.settings.put({ ...s, warmup: warm.split(',').map((x) => x.trim()).filter(Boolean) });
@@ -68,18 +71,20 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
       </div>
 
       <div className="card col" style={{ gap: 10 }}>
-        <div className="label">Gym</div>
-        <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Name</span><input className="field" value={s.gym.name} onChange={(e) => setS({ ...s, gym: { ...s.gym, name: e.target.value } })} /></label>
-        <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Address</span><input className="field" value={s.gym.address} onChange={(e) => setS({ ...s, gym: { ...s.gym, address: e.target.value } })} /></label>
-        {s.gym.hours.map((h, i) => (
-          <div key={i} className="grid3">
-            <input className="field" value={h.days} onChange={(e) => setS({ ...s, gym: { ...s.gym, hours: s.gym.hours.map((x, j) => (j === i ? { ...x, days: e.target.value } : x)) } })} />
-            <input className="field num" value={h.open} onChange={(e) => setS({ ...s, gym: { ...s.gym, hours: s.gym.hours.map((x, j) => (j === i ? { ...x, open: e.target.value } : x)) } })} />
-            <input className="field num" value={h.close} onChange={(e) => setS({ ...s, gym: { ...s.gym, hours: s.gym.hours.map((x, j) => (j === i ? { ...x, close: e.target.value } : x)) } })} />
-          </div>
-        ))}
+        <div className="row between"><div className="label">Your gym</div>{s.gymId && <button className="small" style={{ color: 'var(--acc)', fontWeight: 600 }} onClick={() => setS({ ...s, gymId: undefined })}>Clear</button>}</div>
+        {s.gymId && (() => { const g = GYMS.find((x) => x.id === s.gymId); return g ? <div className="inner row between"><div><div style={{ fontWeight: 600 }}>{g.chain} {g.name}</div><div className="small muted">{g.address}, {g.postcode} {g.city}</div></div><Icon name="check" size={18} style={{ color: 'var(--ok)' }} /></div> : null; })()}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{(['All', 'SATS', 'EVO', 'Fresh Fitness'] as const).map((c) => <button key={c} className={'pill sm' + (chain === c ? ' on' : '')} onClick={() => setChain(c)}>{c}</button>)}</div>
+        <input className="search" placeholder="Search by name, street or area…" value={gq} onChange={(e) => setGq(e.target.value)} />
+        <div className="list" style={{ maxHeight: 320, overflowY: 'auto', padding: 0 }}>
+          {GYMS.filter((g) => (chain === 'All' || g.chain === chain) && (!gq || `${g.chain} ${g.name} ${g.address} ${g.city}`.toLowerCase().includes(gq.toLowerCase()))).map((g) => (
+            <button key={g.id} className="item" style={{ width: '100%', textAlign: 'left', minHeight: 48, padding: '0 4px', background: s.gymId === g.id ? 'var(--acc-soft)' : 'transparent', borderRadius: 8 }} onClick={() => setS({ ...s, gymId: g.id })}>
+              <div><div style={{ fontWeight: 600, fontSize: 14 }}>{g.chain} · {g.name}</div><div className="small muted">{g.address}, {g.city}{g.city !== 'Oslo' ? ' (outside Oslo)' : ''}</div></div>
+              <div className="small num muted" style={{ whiteSpace: 'nowrap' }}>{g.hours[0].open}–{g.hours[0].close === '23:59' ? '24:00' : g.hours[0].close}</div>
+            </button>
+          ))}
+        </div>
+        <div className="small muted">86 gyms: SATS, EVO and Fresh Fitness in Oslo plus the nearest in Bærum, Lørenskog, Kolbotn, Lillestrøm and Ski. Hours as published Oct 2026.</div>
       </div>
-
       <div className="card col" style={{ gap: 10 }}>
         <div className="label">Backup</div>
         <div className="row"><button className="btn ghost sm" style={{ flex: 1 }} onClick={exportJson}>Export JSON</button>

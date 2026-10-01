@@ -108,9 +108,7 @@ export const SETTINGS: Settings = {
   weighInDay: 'Fri',
   defaultWeek: DEFAULT_WEEK,
   warmup: ['100 cal cardio', '20 push-ups', '20 air squats', '20 crunches'],
-  gym: {
-    name: 'SATS Colosseum', address: 'Middelthunsgate 19, 0368 Oslo', url: 'https://www.sats.no/treningssenter/oslo/colosseum',
-    hours: [ { days: 'Mon–Thu', open: '05:45', close: '22:30' }, { days: 'Fri', open: '05:45', close: '21:00' }, { days: 'Sat–Sun', open: '08:00', close: '20:00' } ],
-  },
+  gym: { name: '', address: '', url: '', hours: [] },
+  gymId: undefined,
   restSeconds: 90,
 };
