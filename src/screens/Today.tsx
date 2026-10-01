@@ -8,6 +8,9 @@ import { GYM } from '../db/gyms';
 import { isWeekB, streakWithGrace, milestone } from '../lib/training';
 import type { ScreenProps } from './types';
 import { useState } from 'react';
+import { readinessAdvice, type Readiness } from '../lib/recovery';
+import { reviewWeekFor, weekReview } from '../lib/review';
+import { ReviewCard } from '../ui/ReviewCard';
 
 export function Today({ go, settings, toast }: ScreenProps) {
   const t = today();
@@ -20,11 +23,15 @@ export function Today({ go, settings, toast }: ScreenProps) {
   const food = useLiveQuery(() => db.food.where('date').equals(t).toArray(), [t]) ?? [];
   const steps = useLiveQuery(() => db.steps.toArray(), []) ?? [];
   const [stepInput, setStepInput] = useState('');
+  const [ready, setReady] = useState<Readiness | null>(null);
+  const foodAll = useLiveQuery(() => db.food.toArray(), []) ?? [];
 
   const days = week?.days ?? settings.defaultWeek;
   const wd = weekdayOf(t);
   const block = blocks.find((b) => b.id === days[wd]);
   const exMap = new Map(exercises.map((e) => [e.id, e]));
+  const reviewWs = reviewWeekFor(new Date());
+  const review = reviewWs ? weekReview(reviewWs, sessions, weighIns, foodAll, steps, exMap, settings) : null;
   const todaySession = sessions.find((s) => s.date === t);
   const open = sessions.find((s) => !s.endedAt);
   const bw = weighIns.at(-1)?.kg ?? settings.bodyweightKg;
@@ -57,17 +64,26 @@ export function Today({ go, settings, toast }: ScreenProps) {
     const b = isWeekB(t);
     return block!.exercises.map((be) => (b && be.weekB ? be.weekB : be)).flatMap((be) => Array.from({ length: be.sets }, (_, i) => ({ exerciseId: be.exerciseId, setNo: i + 1, kg: be.targetKg ?? 0, reps: be.reps, done: false })));
   };
-  const start = async () => {
+  const start = async (readiness?: Readiness) => {
     if (!block) return toast('No workout planned today — set one in Plan');
+    const fresh = !todaySession || !todaySession.sets.length;
+    if (fresh && !readiness && ready === null) { setReady({ sleep: 3, soreness: 3, mood: 3 }); return; }
     if (!todaySession) {
       const sets = buildSets();
-      await db.sessions.add({ id: uid(), date: t, blockId: block.id, blockName: block.name, startedAt: Date.now(), warmup: {}, sets });
+      await db.sessions.add({ id: uid(), date: t, blockId: block.id, blockName: block.name, startedAt: Date.now(), warmup: {}, sets, readiness: readiness?.sleep ? readiness : undefined });
     } else if (!todaySession.sets.length) {
       const sets = buildSets();
-      await db.sessions.update(todaySession.id, { sets, endedAt: undefined });
+      await db.sessions.update(todaySession.id, { sets, endedAt: undefined, readiness: readiness?.sleep ? readiness : undefined });
     }
+    setReady(null);
     go({ name: 'workout' });
   };
+  const ReadyRow = ({ k, label, lo, hi }: { k: keyof Readiness; label: string; lo: string; hi: string }) => (
+    <div className="col" style={{ gap: 6 }}>
+      <div className="row between"><span className="label" style={{ fontSize: 10 }}>{label}</span><span className="small muted">{lo} → {hi}</span></div>
+      <div className="row" style={{ gap: 6 }}>{[1, 2, 3, 4, 5].map((n) => <button key={n} className={'pill' + (ready![k] === n ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', height: 44, fontWeight: 700 }} onClick={() => setReady({ ...ready!, [k]: n })}>{n}</button>)}</div>
+    </div>
+  );
 
   const saveSteps = async () => {
     const n = parseInt(stepInput, 10);
@@ -116,8 +132,19 @@ export function Today({ go, settings, toast }: ScreenProps) {
         })}
       </div>
 
-      {block && (
-        <button className="btn acc" onClick={start}>
+      {ready && block && (() => { const adv = readinessAdvice(ready); return (
+        <div className="card col" style={{ gap: 14, borderColor: 'var(--acc)' }}>
+          <div className="row between"><div><div className="label">Readiness check</div><div className="display" style={{ fontSize: 22 }}>How are you today?</div></div><button className="small muted" onClick={() => { setReady(null); start({ sleep: 0, soreness: 0, mood: 0 }); }}>Skip</button></div>
+          <ReadyRow k="sleep" label="Sleep" lo="rough" hi="great" />
+          <ReadyRow k="soreness" label="Soreness" lo="none" hi="wrecked" />
+          <ReadyRow k="mood" label="Energy" lo="flat" hi="fired up" />
+          <div className="inner col" style={{ gap: 2 }}><div style={{ fontWeight: 700, color: adv.level === 'light' ? 'var(--danger)' : adv.level === 'push' ? 'var(--ok)' : 'var(--ink)' }}>{adv.title}</div><div className="small muted">{adv.detail}</div></div>
+          <button className="btn acc" onClick={() => start(ready)}>Start workout</button>
+        </div>
+      ); })()}
+      {review && (review.sessions > 0 || review.daysLogged > 0) && <ReviewCard r={review} exMap={exMap} title={reviewWs === ws ? 'Week in review' : 'Last week in review'} />}
+      {block && !ready && (
+        <button className="btn acc" onClick={() => start()}>
           <Icon name="play" size={22} sw={2.5} />
           <span>{open ? 'Continue workout' : todaySession?.endedAt ? 'Workout done · reopen' : 'Start workout'}</span>
           <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.75, letterSpacing: '0.08em' }}>{block.exercises.length} lifts{isWeekB(t) && block.exercises.some((e) => e.weekB) ? ' · week B' : ''}</span>

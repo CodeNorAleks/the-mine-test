@@ -6,6 +6,7 @@ import { Icon } from '../ui/Icon';
 import { fmtKg, mmss, today } from '../lib/dates';
 import { lastPerformance, sessionTonnage } from '../lib/stats';
 import { epley1RM, isBarbell, plates, progression, warmupRamp } from '../lib/training';
+import { readinessAdvice } from '../lib/recovery';
 import type { ScreenProps } from './types';
 
 export function Workout({ go, settings, toast }: ScreenProps) {
@@ -45,6 +46,9 @@ export function Workout({ go, settings, toast }: ScreenProps) {
   const topKg = Math.max(0, ...sets.map((x) => x.kg));
   const sugg = progression(sessions, exId, ex, sets[0]?.reps ?? 0, session.date);
   const doneCount = session.sets.filter((s) => s.done).length;
+  const adv = session.readiness?.sleep ? readinessAdvice(session.readiness) : null;
+  const lighter = adv?.level === 'light' && topKg > 0 && !ex?.bodyweight ? Math.round((topKg * adv.factor) / 2.5) * 2.5 : null;
+  const applyLighter = () => lighter !== null && db.sessions.update(session.id, { sets: session.sets.map((x) => (x.exerciseId === exId && !x.done ? { ...x, kg: lighter } : x)) });
 
   const update = (setNo: number, patch: Partial<SetLog>) =>
     db.sessions.update(session.id, { sets: session.sets.map((s) => (s.exerciseId === exId && s.setNo === setNo ? { ...s, ...patch } : s)) });
@@ -95,7 +99,13 @@ export function Workout({ go, settings, toast }: ScreenProps) {
         </div>
       </div>
 
-      {sugg && !session.endedAt && (
+      {adv && !session.endedAt && adv.level !== 'normal' && (
+        <div className="card row between" style={{ padding: '10px 14px', background: adv.level === 'light' ? 'var(--card-inner)' : 'var(--ok-soft)', borderColor: adv.level === 'light' ? 'var(--line)' : 'var(--ok)' }}>
+          <div><div style={{ fontWeight: 600, fontSize: 14 }}>{adv.title}</div><div className="small muted">{adv.level === 'light' && lighter !== null && lighter < topKg ? `Suggested top set today: ${lighter} kg instead of ${topKg}` : adv.detail}</div></div>
+          {adv.level === 'light' && lighter !== null && lighter < topKg && <button className="btn ghost sm" onClick={applyLighter}>Use {lighter}</button>}
+        </div>
+      )}
+      {sugg && !session.endedAt && adv?.level !== 'light' && (
         <div className="card row between" style={{ padding: '10px 14px', background: 'var(--acc-soft)', borderColor: 'var(--acc-line)' }}>
           <div><div style={{ fontWeight: 600, fontSize: 14 }}>Hit {sets[0]?.reps} reps twice at {sugg.from} kg</div><div className="small muted">Time to add weight: {sugg.from} → {sugg.to} kg</div></div>
           <button className="btn acc sm" onClick={applySuggestion}>+{sugg.inc} kg</button>

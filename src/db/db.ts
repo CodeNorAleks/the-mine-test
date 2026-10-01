@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Block, Exercise, FoodEntry, MealPlan, MealPreset, Measurement, Pantry, Program, Session, Settings, StepDay, WeekPlan, WeekendLog, WeighIn } from './types';
+import type { Block, Exercise, FoodEntry, MealPlan, MealPreset, Measurement, Outbox, Pantry, PriceCache, Program, Session, Settings, StepDay, SyncMeta, WeekPlan, WeekendLog, WeighIn } from './types';
 import { ALL_EXERCISES, BLOCKS, MEALS, SETTINGS } from './seed';
 import { PROGRAMS, PROGRAM_EXERCISES } from './programs';
 
@@ -18,6 +18,9 @@ export class MineDB extends Dexie {
   measurements!: Table<Measurement, string>;
   mealPlans!: Table<MealPlan, string>;
   pantry!: Table<Pantry, string>;
+  prices!: Table<PriceCache, string>;
+  syncMeta!: Table<SyncMeta, string>;
+  outbox!: Table<Outbox, string>;
 
   constructor() {
     super('the-mine');
@@ -40,6 +43,13 @@ export class MineDB extends Dexie {
     this.version(3).stores({
       mealPlans: 'weekStart',
       pantry: 'id',
+    });
+    this.version(4).stores({
+      prices: 'id',
+      syncMeta: 'id',
+    });
+    this.version(5).stores({
+      outbox: 'key, at',
     });
   }
 }

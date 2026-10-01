@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { isConfigured, onSync, parseConfig, queueAll, resetConnection, syncNow, type SyncState } from '../lib/sync';
 import { db } from '../db/db';
 import type { Settings, Weekday } from '../db/types';
 import { WEEKDAYS } from '../db/types';
@@ -11,6 +12,17 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
   const [warm, setWarm] = useState(settings.warmup.join(', '));
   const [gq, setGq] = useState('');
   const [chain, setChain] = useState<'All' | 'SATS' | 'EVO' | 'Fresh Fitness'>('All');
+  const [sync, setSync] = useState<SyncState>({ status: 'off', pending: 0 });
+  useEffect(() => onSync(setSync), []);
+  const cfgOk = !!parseConfig(s.firebase ?? '');
+  const connectSync = async () => {
+    if (!cfgOk || !s.syncCode?.trim()) { toast('Paste the Firebase config and choose a vault code first'); return; }
+    const prev = await db.settings.get('settings');
+    const changed = prev?.firebase !== s.firebase || prev?.syncCode !== s.syncCode;
+    await db.settings.put({ ...s, warmup: warm.split(',').map((x) => x.trim()).filter(Boolean) });
+    if (changed || !isConfigured(prev)) { await resetConnection(); await queueAll(); }
+    try { await syncNow({ ...s }); toast('Synced'); } catch (e) { toast((e as Error).message); }
+  };
   const num = (k: keyof Settings) => (e: React.ChangeEvent<HTMLInputElement>) => setS({ ...s, [k]: Number(e.target.value.replace(',', '.')) || 0 });
   const save = async () => {
     await db.settings.put({ ...s, warmup: warm.split(',').map((x) => x.trim()).filter(Boolean) });
@@ -20,7 +32,7 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
     const dump = {
       exported: new Date().toISOString(), settings: await db.settings.toArray(), exercises: await db.exercises.toArray(), blocks: await db.blocks.toArray(),
       weeks: await db.weeks.toArray(), sessions: await db.sessions.toArray(), weighIns: await db.weighIns.toArray(), steps: await db.steps.toArray(),
-      food: await db.food.toArray(), meals: await db.meals.toArray(), weekend: await db.weekend.toArray(),
+      food: await db.food.toArray(), meals: await db.meals.toArray(), weekend: await db.weekend.toArray(), measurements: await db.measurements.toArray(), mealPlans: await db.mealPlans.toArray(), pantry: await db.pantry.toArray(),
     };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `the-mine-backup-${dump.exported.slice(0, 10)}.json`; a.click();
@@ -30,7 +42,7 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
     if (!confirm('Replace everything in the app with this backup?')) return;
     const d = JSON.parse(await f.text());
     await db.transaction('rw', db.tables, async () => {
-      for (const t of ['settings', 'exercises', 'blocks', 'weeks', 'sessions', 'weighIns', 'steps', 'food', 'meals', 'weekend'] as const) {
+      for (const t of ['settings', 'exercises', 'blocks', 'weeks', 'sessions', 'weighIns', 'steps', 'food', 'meals', 'weekend', 'measurements', 'mealPlans', 'pantry'] as const) {
         if (d[t]) { await db.table(t).clear(); await db.table(t).bulkPut(d[t]); }
       }
     });
@@ -85,6 +97,28 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
         </div>
         <div className="small muted">86 gyms: SATS, EVO and Fresh Fitness in Oslo plus the nearest in Bærum, Lørenskog, Kolbotn, Lillestrøm and Ski. Hours as published Oct 2026.</div>
       </div>
+      <div className="card col" style={{ gap: 10 }}>
+        <div className="label">Store prices (Kassalapp)</div>
+        <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>API key</span><input className="field" style={{ fontWeight: 400, fontSize: 13 }} placeholder="paste from kassal.app/profil/api" value={s.kassalKey ?? ''} onChange={(e) => setS({ ...s, kassalKey: e.target.value })} autoCapitalize="off" autoCorrect="off" spellCheck={false} /></label>
+        <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Proxy URL (only if the browser blocks kassal.app)</span><input className="field" style={{ fontWeight: 400, fontSize: 13 }} placeholder="https://your-worker.workers.dev" value={s.kassalProxy ?? ''} onChange={(e) => setS({ ...s, kassalProxy: e.target.value })} autoCapitalize="off" autoCorrect="off" spellCheck={false} /></label>
+        <div className="small muted">Free hobby key at kassal.app → Profil → API. The shopping list then shows what the week costs at Kiwi, Meny and Coop. The key stays on this device (and in your own vault if sync is on).</div>
+      </div>
+
+      <div className="card col" style={{ gap: 10 }}>
+        <div className="row between"><div className="label">Cloud sync (your own Firebase)</div>
+          <span className="small" style={{ fontWeight: 600, color: sync.status === 'error' ? 'var(--danger)' : sync.status === 'idle' && isConfigured(s) ? 'var(--ok)' : 'var(--muted)' }}>{sync.status === 'syncing' ? 'Syncing…' : sync.status === 'error' ? 'Error' : isConfigured(s) && sync.lastSync ? `Synced ${new Date(sync.lastSync).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}` : isConfigured(s) ? 'On' : 'Off'}</span></div>
+        <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Firebase web config {s.firebase ? (cfgOk ? '· looks good' : '· not valid yet') : ''}</span>
+          <textarea className="field" style={{ height: 96, padding: 10, fontWeight: 400, fontSize: 12, fontFamily: 'ui-monospace, monospace', resize: 'vertical' }} placeholder={'{ "apiKey": "…", "authDomain": "…", "projectId": "…", "appId": "…" }'} value={s.firebase ?? ''} onChange={(e) => setS({ ...s, firebase: e.target.value })} autoCapitalize="off" autoCorrect="off" spellCheck={false} /></label>
+        <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Vault code (same on every device — pick something long)</span><input className="field" style={{ fontWeight: 400, fontSize: 13 }} placeholder="e.g. iron-mine-2026-xyz" value={s.syncCode ?? ''} onChange={(e) => setS({ ...s, syncCode: e.target.value })} autoCapitalize="off" autoCorrect="off" spellCheck={false} /></label>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn acc sm" style={{ flex: 1 }} onClick={connectSync} disabled={sync.status === 'syncing'}>{isConfigured(settings) ? 'Sync now' : 'Connect & sync'}</button>
+          {isConfigured(settings) && <button className="btn ghost sm" style={{ flex: 1 }} onClick={async () => { await db.settings.update('settings', { firebase: '', syncCode: '' }); setS({ ...s, firebase: '', syncCode: '' }); await resetConnection(); toast('Sync turned off on this device'); }}>Turn off</button>}
+        </div>
+        {sync.status === 'error' && <div className="small" style={{ color: 'var(--danger)' }}>{sync.message}</div>}
+        {sync.pending > 0 && sync.status !== 'syncing' && <div className="small muted">{sync.pending} change{sync.pending === 1 ? '' : 's'} waiting to upload.</div>}
+        <div className="small muted">Free: create a project at console.firebase.google.com → add a Web app → copy the config here → Build › Authentication: enable Anonymous → Build › Firestore: create database, rules <code>allow read, write: if request.auth != null;</code>. Then paste the same config and vault code on your other devices. Full steps in the README.</div>
+      </div>
+
       <div className="card col" style={{ gap: 10 }}>
         <div className="label">Backup</div>
         <div className="row"><button className="btn ghost sm" style={{ flex: 1 }} onClick={exportJson}>Export JSON</button>

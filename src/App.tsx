@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, ensureSeed } from './db/db';
+import { startSync } from './lib/sync';
 import { Icon } from './ui/Icon';
 import { Today } from './screens/Today';
 import { Plan } from './screens/Plan';
@@ -26,7 +27,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [route, setRoute] = useState<Route>({ name: 'today' });
   const [toast, setToast] = useState<string | null>(null);
-  useEffect(() => { ensureSeed().then(() => setReady(true)); }, []);
+  useEffect(() => { ensureSeed().then(() => { setReady(true); startSync(); }); }, []);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 2200); return () => clearTimeout(t); }, [toast]);
   useEffect(() => { window.scrollTo({ top: 0 }); }, [route.name]);
   const settings = useLiveQuery(() => db.settings.get('settings'), [], undefined);

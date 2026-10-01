@@ -7,6 +7,8 @@ import { Bars, LineChart } from '../ui/Charts';
 import { addDays, fmtKg, fmtShort, isoWeekNumber, weekStart } from '../lib/dates';
 import { musclesHit, personalRecords, topSets, weekTonnage } from '../lib/stats';
 import { deloadWarning, epley1RM, monthSummary, streakWithGrace } from '../lib/training';
+import { weekReview } from '../lib/review';
+import { ReviewCard } from '../ui/ReviewCard';
 import { shareSummaryCard } from '../lib/share';
 import type { ScreenProps } from './types';
 
@@ -26,6 +28,11 @@ export function Progress({ settings, exerciseId }: ScreenProps & { exerciseId?: 
   const st = streakWithGrace(sessions, settings);
   const deload = deloadWarning(weeks.map((w) => w.value));
   const month = monthSummary(sessions, weighIns, exMap, bw);
+  const foodAll = useLiveQuery(() => db.food.toArray(), []) ?? [];
+  const stepsAll = useLiveQuery(() => db.steps.toArray(), []) ?? [];
+  const [reviewOffset, setReviewOffset] = useState(new Date().getDay() === 0 ? 0 : -1);
+  const reviewWs = addDays(ws, reviewOffset * 7);
+  const review = weekReview(reviewWs, sessions, weighIns, foodAll, stepsAll, exMap, settings);
   const recent = [...sessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   const gain = tops.length > 1 ? tops[tops.length - 1].kg - tops[0].kg : 0;
 
@@ -37,6 +44,10 @@ export function Progress({ settings, exerciseId }: ScreenProps & { exerciseId?: 
       </div>
 
       {deload && <div className="card" style={{ padding: '10px 14px', background: 'var(--acc-soft)', borderColor: 'var(--acc-line)' }}><div style={{ fontWeight: 600, fontSize: 14 }}>Four weeks of rising tonnage</div><div className="small muted">Consider a deload week: same lifts, 60 % of the weight, fewer sets.</div></div>}
+      <div className="col" style={{ gap: 6 }}>
+        <div className="row between"><div className="label">Weekly review</div><div className="row" style={{ gap: 4 }}><button className="pill sm" onClick={() => setReviewOffset(reviewOffset - 1)}>‹</button><button className="pill sm" disabled={reviewOffset >= 0} style={{ opacity: reviewOffset >= 0 ? 0.4 : 1 }} onClick={() => setReviewOffset(reviewOffset + 1)}>›</button></div></div>
+        <ReviewCard r={review} exMap={exMap} title={reviewOffset === 0 ? 'This week so far' : reviewOffset === -1 ? 'Last week' : 'Weekly review'} />
+      </div>
       <div className="card col" style={{ gap: 8 }}>
         <div className="row between"><div className="label">This month</div><button className="pill sm" onClick={() => shareSummaryCard(month, settings.name)}>Share card</button></div>
         <div className="grid3">

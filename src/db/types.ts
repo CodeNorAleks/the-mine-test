@@ -68,6 +68,8 @@ export interface Session {
   endedAt?: number;
   warmup: Record<string, boolean>;
   sets: SetLog[];
+  /** Pre-workout readiness check (1–5 each). */
+  readiness?: { sleep: number; soreness: number; mood: number };
 }
 
 export interface WeighIn { id: string; date: string; kg: number; }
@@ -97,7 +99,18 @@ export interface Settings {
   proteinTarget?: number;     // g/day
   theme?: 'auto' | 'light' | 'dark';
   graceDays?: number;         // missed planned days allowed per rolling 7 days before the streak breaks
+  kassalKey?: string;         // Kassalapp API key (kassal.app/profil/api) — prices on the shopping list
+  kassalProxy?: string;       // optional CORS proxy base URL in front of https://kassal.app/api/v1
+  firebase?: string;          // Firebase web config JSON (apiKey, projectId, …) for cloud sync
+  syncCode?: string;          // your private vault code — same on every device
 }
+
+/** Cached store prices for one ingredient (Kassalapp). */
+export interface PriceCache { id: string; fetchedAt: number; q: string; offers: { chain: string; store: string; name: string; price: number; unitPrice?: number; unit?: string }[] }
+/** Pending local changes waiting to be pushed to the cloud. */
+export interface Outbox { key: string; table: string; id: string; op: 'put' | 'del'; at: number }
+/** Sync bookkeeping: last push/pull per device. */
+export interface SyncMeta { id: 'sync'; lastPull: number; lastPush: number; device: string }
 
 export interface MealPlan { weekStart: string; days: Record<Weekday, Partial<Record<'breakfast' | 'lunch' | 'dinner' | 'snack', string>>> }
 export interface Pantry { id: 'pantry'; have: string[] }   // ingredient ids ticked as "have at home"

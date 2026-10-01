@@ -6,6 +6,7 @@ import { WEEKDAYS, type Block, type Weekday } from '../db/types';
 import { Icon } from '../ui/Icon';
 import { addDays, fmtRange, isoWeekNumber, today, weekDates, weekStart } from '../lib/dates';
 import type { ScreenProps } from './types';
+import { RecoveryCard } from '../ui/RecoveryCard';
 
 function BlockChip({ block, id, small, onRemove, onEdit }: { block: Block; id: string; small?: boolean; onRemove?: () => void; onEdit?: () => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, data: { blockId: block.id } });
@@ -35,6 +36,8 @@ export function Plan({ go, settings, toast }: ScreenProps) {
   const week = useLiveQuery(() => db.weeks.get(ws), [ws]);
   const blocks = useLiveQuery(() => db.blocks.orderBy('order').toArray(), []) ?? [];
   const sessions = useLiveQuery(() => db.sessions.toArray(), []) ?? [];
+  const exercises = useLiveQuery(() => db.exercises.toArray(), []) ?? [];
+  const exMap = new Map(exercises.map((e) => [e.id, e]));
   const [picked, setPicked] = useState<string | null>(null);
   const [active, setActive] = useState<Block | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }));
@@ -98,6 +101,8 @@ export function Plan({ go, settings, toast }: ScreenProps) {
             );
           })}
         </div>
+
+        {offset === 0 && <RecoveryCard sessions={sessions} exMap={exMap} compact />}
 
         <div className="col" style={{ gap: 10 }}>
           <div className="row between"><div className="label">Workout blocks</div><button className="small" style={{ color: 'var(--acc)', fontWeight: 600 }} onClick={newBlock}>+ New block</button></div>

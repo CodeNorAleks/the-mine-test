@@ -6,17 +6,18 @@ const INK = '#15161a';
 const S = { stroke: INK, strokeWidth: 1.3, strokeLinejoin: 'round' as const };
 const D = { stroke: INK, strokeWidth: 0.9, fill: 'none', strokeLinecap: 'round' as const, opacity: 0.55 };
 
-function col(hit: Hit, r: Region | 'hands' | 'head') {
+function col(hit: Hit, r: Region | 'hands' | 'head', colors?: Partial<Record<Region, string>>) {
   if (r === 'hands' || r === 'head') return '#e8e5de';
+  if (colors && colors[r]) return colors[r]!;
   const v = hit[r];
   return v === 'full' ? '#b08d57' : v === 'half' ? '#d9c39a' : '#e8e5de';
 }
 
-export function BodyMap({ hit, size = 104 }: { hit: Hit; size?: number }) {
+export function BodyMap({ hit, size = 104, colors, legend = true }: { hit: Hit; size?: number; colors?: Partial<Record<Region, string>>; legend?: boolean }) {
   const M = (r: Region | 'hands', d: string) => (
     <>
-      <path d={d} fill={col(hit, r)} {...S} />
-      <path d={d} fill={col(hit, r)} {...S} transform="translate(120 0) scale(-1 1)" />
+      <path d={d} fill={col(hit, r, colors)} {...S} />
+      <path d={d} fill={col(hit, r, colors)} {...S} transform="translate(120 0) scale(-1 1)" />
     </>
   );
   const h = size * 2.1;
@@ -68,11 +69,11 @@ export function BodyMap({ hit, size = 104 }: { hit: Hit; size?: number }) {
     <div className="row" style={{ justifyContent: 'space-around', alignItems: 'flex-start' }}>
       <div className="col" style={{ alignItems: 'center', gap: 6 }}>{front}<div className="label" style={{ fontSize: 10 }}>Front</div></div>
       <div className="col" style={{ alignItems: 'center', gap: 6 }}>{back}<div className="label" style={{ fontSize: 10 }}>Back</div></div>
-      <div className="col" style={{ gap: 10, paddingTop: 12 }}>
+      {legend && <div className="col" style={{ gap: 10, paddingTop: 12 }}>
         {[['#b08d57', 'Hit'], ['#d9c39a', 'In progress'], ['#e8e5de', 'Not yet']].map(([c, t]) => (
           <div key={t} className="row small" style={{ gap: 6, fontWeight: 600, color: 'var(--muted)' }}><i style={{ width: 12, height: 12, borderRadius: 4, background: c, display: 'block' }} />{t}</div>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }
