@@ -49,6 +49,10 @@ export function Food({ settings, toast, go }: ScreenProps) {
   return (
     <div className="screen">
       <div className="head"><div><div className="label kicker">Food</div><div className="display title">{fmtLong(t).split(' · ')[0]}</div></div></div>
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn acc" style={{ flex: 1 }} onClick={() => go({ name: 'meals' })}>Meal plan</button>
+        <button className="btn ghost" style={{ flex: 1 }} onClick={() => go({ name: 'shopping', weekStart: weekStart() })}>Shopping list</button>
+      </div>
 
       <div className="card row" style={{ gap: 20, padding: 20 }}>
         <Ring pct={eaten / settings.kcalBudget} color={left >= 0 ? 'var(--ok)' : 'var(--danger)'}>
