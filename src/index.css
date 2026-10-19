@@ -34,9 +34,22 @@
 :root[data-theme="dark"] .btn { color: #15161a; background: #f1efe9; }
 :root[data-theme="dark"] .btn.acc { color: #15161a; }
 :root[data-theme="dark"] .btn.ghost { background: var(--card-inner); color: var(--ink); }
+:root[data-theme="dark"] .pill.on { color: #15161a; }
 :root[data-theme="dark"] .bar { background: #3a3b42; }
 :root[data-theme="dark"] img.mark { filter: invert(1); mix-blend-mode: screen; }
 :root[data-theme="dark"] .tick.done { color: #15161a; }
+/* Same component fixes when the theme is Auto and the phone is in dark mode */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] .card.ink { background: #0e0f12; }
+  :root[data-theme="auto"] .pill.gold { color: #e5c98f; }
+  :root[data-theme="auto"] .btn { color: #15161a; background: #f1efe9; }
+  :root[data-theme="auto"] .btn.acc { color: #15161a; }
+  :root[data-theme="auto"] .btn.ghost { background: var(--card-inner); color: var(--ink); }
+  :root[data-theme="auto"] .pill.on { color: #15161a; }
+  :root[data-theme="auto"] .bar { background: #3a3b42; }
+  :root[data-theme="auto"] img.mark { filter: invert(1); mix-blend-mode: screen; }
+  :root[data-theme="auto"] .tick.done { color: #15161a; }
+}
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
