@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/db';
-import type { SetLog } from '../db/types';
+import { db, uid } from '../db/db';
+import { LiftPicker } from '../ui/LiftPicker';
+import type { Exercise, MuscleGroup, SetLog } from '../db/types';
 import { Icon } from '../ui/Icon';
 import { fmtKg, mmss, today } from '../lib/dates';
 import { lastPerformance, sessionTonnage } from '../lib/stats';
@@ -19,6 +20,8 @@ export function Workout({ go, settings, toast }: ScreenProps) {
   const [rest, setRest] = useState<number | null>(null);
   const [focus, setFocus] = useState<{ setNo: number; field: 'kg' | 'reps' } | null>(null);
   const [showRamp, setShowRamp] = useState(false);
+  const [picker, setPicker] = useState<null | 'swap' | 'add'>(null);
+  const [swapped, setSwapped] = useState<{ from: string; to: string } | null>(null);
   useEffect(() => { setFocus(null); }, [exIdx]);
   const [tick, setTick] = useState(0);
   const restEnd = useRef<number | null>(null);
@@ -74,6 +77,38 @@ export function Workout({ go, settings, toast }: ScreenProps) {
   const applySuggestion = () => { if (!sugg) return; db.sessions.update(session.id, { sets: session.sets.map((x) => (x.exerciseId === exId && !x.done ? { ...x, kg: sugg.to } : x)) }); toast(`Set to ${sugg.to} kg`); };
   const addSet = () => { const lastSet = sets.at(-1); db.sessions.update(session.id, { sets: [...session.sets, { exerciseId: exId, setNo: sets.length + 1, kg: lastSet?.kg ?? 0, reps: lastSet?.reps ?? 10, done: false }] }); };
   const removeSet = () => { if (sets.length <= 1) return; db.sessions.update(session.id, { sets: session.sets.filter((s) => !(s.exerciseId === exId && s.setNo === sets.length)) }); };
+  const inSession = new Set(order);
+  const recent = [...sessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8).flatMap((s) => s.sets.map((x) => x.exerciseId));
+  const swapLift = async (to: Exercise) => {
+    const last = lastPerformance(sessions.filter((s) => s.endedAt), to.id, session.date);
+    await db.sessions.update(session.id, { sets: session.sets.map((x) => (x.exerciseId === exId ? { ...x, exerciseId: to.id, kg: to.bodyweight ? 0 : x.done ? x.kg : (last?.kg ?? 0), done: x.done } : x)) });
+    setSwapped({ from: exId, to: to.id }); setPicker(null); toast(`Swapped to ${to.name}`);
+  };
+  const saveSwapToBlock = async () => {
+    if (!swapped) return;
+    const b = await db.blocks.get(session.blockId); if (!b) return;
+    await db.blocks.update(b.id, { exercises: b.exercises.map((be) => (be.exerciseId === swapped.from ? { ...be, exerciseId: swapped.to, targetKg: undefined } : be)) });
+    setSwapped(null); toast('Block updated');
+  };
+  const addLift = async (to: Exercise) => {
+    const last = lastPerformance(sessions.filter((s) => s.endedAt), to.id, session.date);
+    const n = session.sets.filter((x) => x.exerciseId === order[order.length - 1]).length || 3;
+    const reps = to.bodyweight ? 15 : 10;
+    const extra: SetLog[] = Array.from({ length: n }, (_, i) => ({ exerciseId: to.id, setNo: i + 1, kg: to.bodyweight ? 0 : (last?.kg ?? 0), reps: last?.reps ?? reps, done: false }));
+    await db.sessions.update(session.id, { sets: [...session.sets, ...extra] });
+    setPicker(null); setExIdx(order.length); toast(`Added ${to.name}`);
+  };
+  const removeLift = async (id: string) => {
+    if (session.sets.some((x) => x.exerciseId === id && x.done)) { toast('Has logged sets — untick them first'); return; }
+    await db.sessions.update(session.id, { sets: session.sets.filter((x) => x.exerciseId !== id) });
+    setExIdx((i) => Math.max(0, Math.min(i, order.length - 2)));
+  };
+  const newLift = async (name: string, group: MuscleGroup) => {
+    const regions: Record<string, Exercise['regions']> = { Back: ['back', 'biceps'], Chest: ['chest', 'triceps'], Shoulders: ['shoulders'], Arms: ['biceps', 'triceps'], Legs: ['quads', 'hamstrings', 'glutes'], Glutes: ['glutes'], Abs: ['abs', 'obliques'], Cardio: [] };
+    const ex: Exercise = { id: uid(), name, group, regions: regions[group] ?? [], source: 'Custom' };
+    await db.exercises.add(ex);
+    if (picker === 'swap') await swapLift(ex); else await addLift(ex);
+  };
   const finish = async () => { await db.sessions.update(session.id, { endedAt: Date.now() }); toast(`Session saved · ${fmtKg(tonnage)}`); go({ name: 'today' }); };
   const discard = async () => { if (confirm('Discard this session?')) { await db.sessions.delete(session.id); go({ name: 'today' }); } };
   const skipRest = () => { restEnd.current = null; setRest(null); };
@@ -92,7 +127,11 @@ export function Workout({ go, settings, toast }: ScreenProps) {
       <div className="bar" style={{ height: 4 }}><i style={{ width: `${(doneCount / Math.max(1, session.sets.length)) * 100}%` }} /></div>
 
       <div className="col" style={{ gap: 6, paddingTop: 8 }}>
-        <div className="display" style={{ fontSize: 40 }}>{ex?.name ?? exId}</div>
+        <div className="row between" style={{ alignItems: 'flex-start', gap: 8 }}>
+          <div className="display" style={{ fontSize: 40, lineHeight: 1.05 }}>{ex?.name ?? exId}</div>
+          {!session.endedAt && <button className="pill sm" style={{ flexShrink: 0, marginTop: 8 }} onClick={() => setPicker('swap')}><Icon name="edit" size={14} /> Swap</button>}
+        </div>
+        {swapped?.to === exId && <div className="row between inner" style={{ padding: '8px 10px' }}><span className="small">Swapped for today only.</span><button className="small" style={{ color: 'var(--acc)', fontWeight: 700 }} onClick={saveSwapToBlock}>Also save to block</button></div>}
         <div className="row small" style={{ gap: 10, color: 'var(--muted)', fontWeight: 600 }}>
           <span style={{ color: 'var(--acc)' }}>{sets.length} sets · {sets[0]?.reps} reps{ex?.bodyweight ? ' · bodyweight' : sets[0]?.kg ? ` · ${sets[0].kg} kg` : ''}</span>
           {last && <><span>·</span><span>Last {last.kg ? `${last.kg} kg × ` : ''}{last.reps} × {last.sets}</span></>}
@@ -183,12 +222,18 @@ export function Workout({ go, settings, toast }: ScreenProps) {
             return (
               <button key={id} className="item" style={{ width: '100%', textAlign: 'left', minHeight: 48 }} onClick={() => setExIdx(i)}>
                 <div><div style={{ fontWeight: 600, fontSize: 15, color: i === exIdx ? 'var(--acc)' : undefined }}>{exMap.get(id)?.name ?? id}</div><div className="small muted">{d} / {ss.length} sets{ss[0]?.kg ? ` · ${ss[0].kg} kg` : ''}</div></div>
-                <span style={{ color: d === ss.length ? 'var(--ok)' : 'var(--faint)' }}><Icon name={d === ss.length ? 'check' : 'chev'} size={18} /></span>
+                <span className="row" style={{ gap: 4 }}>
+                  {!session.endedAt && d === 0 && order.length > 1 && <span role="button" aria-label="Remove from today" onClick={(e) => { e.stopPropagation(); removeLift(id); }} style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}><Icon name="x" size={14} sw={2.5} /></span>}
+                  <span style={{ color: d === ss.length ? 'var(--ok)' : 'var(--faint)' }}><Icon name={d === ss.length ? 'check' : 'chev'} size={18} /></span>
+                </span>
               </button>
             );
           })}
+          {!session.endedAt && <button className="item" style={{ width: '100%', textAlign: 'left', minHeight: 48, color: 'var(--acc)', fontWeight: 600 }} onClick={() => setPicker('add')}><span className="row" style={{ gap: 8 }}><Icon name="plus" size={18} sw={2.5} /> Add a lift to today</span></button>}
         </div>
       </div>
+      {picker && <LiftPicker exercises={exercises} title={picker === 'swap' ? `Swap ${ex?.name ?? ''}` : 'Add a lift'} near={picker === 'swap' ? ex : undefined} exclude={inSession} recent={recent}
+        onPick={picker === 'swap' ? swapLift : addLift} onNew={newLift} onClose={() => setPicker(null)} />}
       <div className="row" style={{ gap: 8 }}>
         {!session.endedAt && <button className="btn ghost sm" style={{ flex: 1 }} onClick={finish}>Finish early</button>}
         <button className="btn ghost sm" style={{ flex: 1, color: 'var(--danger)' }} onClick={discard}>Discard</button>
