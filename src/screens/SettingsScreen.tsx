@@ -6,6 +6,7 @@ import { WEEKDAYS } from '../db/types';
 import { Icon } from '../ui/Icon';
 import type { ScreenProps } from './types';
 import { GYMS } from '../db/gyms';
+import { ACTIVITY, PACE, suggestedTargets } from '../lib/nutrition';
 
 export function SettingsScreen({ go, settings, toast }: ScreenProps) {
   const [s, setS] = useState<Settings>(settings);
@@ -15,6 +16,8 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
   const [sync, setSync] = useState<SyncState>({ status: 'off', pending: 0 });
   useEffect(() => onSync(setSync), []);
   const cfgOk = !!parseConfig(s.firebase ?? '');
+  const trainingDays = WEEKDAYS.filter((d) => s.defaultWeek[d]).length;
+  const sugg = suggestedTargets(s, trainingDays);
   const connectSync = async () => {
     if (!cfgOk || !s.syncCode?.trim()) { toast('Paste the Firebase config and choose a vault code first'); return; }
     const prev = await db.settings.get('settings');
@@ -64,14 +67,26 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
         <div className="label">You</div>
         <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Name</span><input className="field" value={s.name} onChange={(e) => setS({ ...s, name: e.target.value })} /></label>
         <div className="grid3"><F label="Start kg" k="startKg" /><F label="Goal kg" k="goalKg" /><F label="Now kg" k="bodyweightKg" /></div>
+        <div className="grid3"><F label="Height cm" k="heightCm" /><F label="Age" k="age" />
+          <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Sex</span><select className="field" value={s.sex ?? ''} onChange={(e) => setS({ ...s, sex: (e.target.value || undefined) as Settings['sex'] })}><option value="">–</option><option value="male">Male</option><option value="female">Female</option></select></label></div>
+        <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Activity outside the gym</span>
+          <select className="field" value={s.activity ?? 'light'} onChange={(e) => setS({ ...s, activity: e.target.value as Settings['activity'] })}>{ACTIVITY.map((a) => <option key={a.id} value={a.id}>{a.label} · {a.hint}</option>)}</select></label>
         <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Weigh-in day</span>
           <select className="field" value={s.weighInDay} onChange={(e) => setS({ ...s, weighInDay: e.target.value as Weekday })}>{WEEKDAYS.map((w) => <option key={w}>{w}</option>)}</select></label>
       </div>
 
       <div className="card col" style={{ gap: 10 }}>
         <div className="label">Food</div>
-        <div className="grid3"><F label="kcal / day" k="kcalBudget" /><F label="Beers / weekend" k="beerBudget" /><F label="Wine btl / weekend" k="wineBudget" /></div>
-        <F label="Protein g / day (default 2 × goal kg)" k="proteinTarget" />
+        <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Pace</span>
+          <select className="field" value={s.pace ?? (sugg?.pace.id ?? 'steady')} onChange={(e) => setS({ ...s, pace: e.target.value as Settings['pace'] })}>{PACE.map((p) => <option key={p.id} value={p.id}>{p.label} · {p.hint}</option>)}</select></label>
+        {sugg ? (
+          <div className="inner col" style={{ gap: 6 }}>
+            <div className="row between"><div><div className="label" style={{ fontSize: 10 }}>Calculated for you</div><div style={{ fontWeight: 700, fontSize: 16 }}>{sugg.kcal} kcal · {sugg.protein} g protein</div></div>
+              <button className="btn acc sm" onClick={() => { setS({ ...s, kcalBudget: sugg.kcal, proteinTarget: sugg.protein }); toast('Targets set'); }}>Use these</button></div>
+            <div className="small muted">You burn about {sugg.tdee} kcal a day with {trainingDays} training day{trainingDays === 1 ? '' : 's'}. {sugg.pace.label} = {sugg.pace.kcal > 0 ? '+' : ''}{sugg.pace.kcal} kcal{sugg.weeks ? ` → goal weight in about ${sugg.weeks} weeks` : ''}.{sugg.floored ? ' Capped at a safe minimum.' : ''} Protein is 2 g per kg of goal weight.</div>
+          </div>
+        ) : <div className="small muted">Fill in weight, height, age and sex above and I'll calculate your daily calories and protein.</div>}
+        <div className="grid2"><F label="kcal / day" k="kcalBudget" /><F label="Protein g / day" k="proteinTarget" /></div>
       </div>
 
       <div className="card col" style={{ gap: 10 }}>

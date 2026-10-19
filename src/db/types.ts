@@ -103,6 +103,9 @@ export interface Settings {
   kassalProxy?: string;       // optional CORS proxy base URL in front of https://kassal.app/api/v1
   firebase?: string;          // Firebase web config JSON (apiKey, projectId, …) for cloud sync
   syncCode?: string;          // your private vault code — same on every device
+  heightCm?: number; age?: number; sex?: 'male' | 'female';
+  activity?: 'sedentary' | 'light' | 'moderate' | 'active' | 'athlete';   // activity outside training
+  pace?: 'slow' | 'steady' | 'fast' | 'maintain' | 'gain';               // weekly rate toward goal
 }
 
 /** Cached store prices for one ingredient (Kassalapp). */

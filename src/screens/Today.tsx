@@ -105,7 +105,7 @@ export function Today({ go, settings, toast }: ScreenProps) {
           <button className="pill" style={{ width: 36, padding: 0, justifyContent: 'center' }} onClick={() => go({ name: 'settings' })} aria-label="Settings"><Icon name="edit" size={16} /></button>
         </div>
       </div>
-      {!settings.name && <button className="card row between" style={{ padding: '12px 16px', textAlign: 'left', borderColor: 'var(--acc)' }} onClick={() => go({ name: 'settings' })}><div><div style={{ fontWeight: 600 }}>Set up your numbers</div><div className="small muted">Name, start and goal weight, calorie and weekend budgets — stored only on this device.</div></div><Icon name="chev" size={18} /></button>}
+      {!settings.name && <button className="card row between" style={{ padding: '12px 16px', textAlign: 'left', borderColor: 'var(--acc)' }} onClick={() => go({ name: 'settings' })}><div><div style={{ fontWeight: 600 }}>Set up your numbers</div><div className="small muted">Weight, height, age and goal — the app calculates your calories and protein. Stored only on this device.</div></div><Icon name="chev" size={18} /></button>}
       <div className="head" style={{ paddingTop: 8 }}>
         <div>
           <div className="label kicker">{fmtLong(t)}</div>

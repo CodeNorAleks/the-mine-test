@@ -12,7 +12,6 @@ export function Food({ settings, toast, go }: ScreenProps) {
   const ws = weekStart();
   const meals = useLiveQuery(() => db.meals.orderBy('order').toArray(), []) ?? [];
   const entries = useLiveQuery(() => db.food.where('date').equals(t).toArray(), [t]) ?? [];
-  const weekend = useLiveQuery(() => db.weekend.get(ws), [ws]);
   const plan = useLiveQuery(() => db.mealPlans.get(ws), [ws]);
   const planned = SLOTS.map((s) => ({ slot: s, meal: MEALS.find((m) => m.id === plan?.days[weekdayOf(t)]?.[s]) })).filter((x) => x.meal);
   const weekFood = useLiveQuery(() => db.food.where('date').between(addDays(t, -6), t, true, true).toArray(), [t]) ?? [];
@@ -35,10 +34,6 @@ export function Food({ settings, toast, go }: ScreenProps) {
     const k = Number(kcal); if (!k) return;
     await db.food.add({ id: uid(), date: t, name: name || 'Quick add', kcal: k, protein: Number(protein) || 0 });
     setName(''); setKcal(''); setProtein('');
-  };
-  const bump = async (k: 'beers' | 'wine', d: number) => {
-    const w = weekend ?? { weekStart: ws, beers: 0, wine: 0 };
-    await db.weekend.put({ ...w, [k]: Math.max(0, w[k] + d) });
   };
   const editPreset = async (m: typeof meals[number]) => {
     const desc = prompt(`${m.name} — description`, m.desc); if (desc === null) return;
@@ -69,7 +64,7 @@ export function Food({ settings, toast, go }: ScreenProps) {
         <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 70 }}>
           {days.map((x) => <div key={x.d} className="col" style={{ flex: 1, alignItems: 'center', gap: 4 }}><div style={{ width: '100%', height: Math.max(3, Math.min(60, (x.kcal / (settings.kcalBudget * 1.3)) * 60)), borderRadius: 4, background: x.kcal > settings.kcalBudget ? 'var(--danger)' : x.kcal ? 'var(--ok)' : 'var(--line)' }} /><div className="small muted" style={{ fontSize: 10 }}>{x.d.slice(8)}</div></div>)}
         </div>
-        {weighIns.length > 1 && <div className="small muted">Weight {weighIns.at(-2)!.kg} → {weighIns.at(-1)!.kg} kg across the last two weigh-ins{(weekend?.beers ?? 0) + (weekend?.wine ?? 0) > 0 ? ` · ${weekend?.beers ?? 0} beers, ${weekend?.wine ?? 0} wine this week` : ''}</div>}
+        {weighIns.length > 1 && <div className="small muted">Weight {weighIns.at(-2)!.kg} → {weighIns.at(-1)!.kg} kg across the last two weigh-ins</div>}
       </div>
 
       <div className="col" style={{ gap: 8 }}>
@@ -114,18 +109,6 @@ export function Food({ settings, toast, go }: ScreenProps) {
         ))}
       </div>
 
-      <div className="card col" style={{ gap: 10 }}>
-        <div className="row between"><div className="label">Weekend budget</div><div className="small muted" style={{ fontWeight: 600 }}>resets Monday</div></div>
-        {([['beers', 'Beer', settings.beerBudget, ''], ['wine', 'Wine', settings.wineBudget, ' btl']] as const).map(([k, label, budget, unit]) => {
-          const v = weekend?.[k] ?? 0;
-          return (
-            <div key={k} className="col" style={{ gap: 6 }}>
-              <div className="row between"><span style={{ fontWeight: 600 }}>{label}</span><span className="row" style={{ gap: 8 }}><button className="pill sm" onClick={() => bump(k, -1)}><Icon name="minus" size={14} /></button><span style={{ fontWeight: 700, minWidth: 60, textAlign: 'center' }}>{v} <span className="muted">/ {budget}{unit}</span></span><button className="pill sm" onClick={() => bump(k, 1)}><Icon name="plus" size={14} /></button></span></div>
-              <div className="bar"><i style={{ width: `${Math.min(100, (v / budget) * 100)}%`, background: v > budget ? 'var(--danger)' : 'var(--acc)' }} /></div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
