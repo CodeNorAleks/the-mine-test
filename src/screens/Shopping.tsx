@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CHAINS, nok, refreshPrices, type Chain } from '../lib/kassal';
 import { db } from '../db/db';
 import { WEEKDAYS } from '../db/types';
@@ -11,7 +11,8 @@ import type { ScreenProps } from './types';
 const AISLES: Aisle[] = ['Fruit & veg', 'Meat & fish', 'Dairy & eggs', 'Bread', 'Dry goods', 'Frozen', 'Other'];
 
 export function Shopping({ go, toast, settings, weekStart: ws }: ScreenProps & { weekStart: string }) {
-  const prices = useLiveQuery(() => db.prices.toArray(), []) ?? [];
+  const pricesRaw = useLiveQuery(() => db.prices.toArray(), []);
+  const prices = pricesRaw ?? [];
   const priceMap = new Map(prices.map((p) => [p.id, p]));
   const [busy, setBusy] = useState<string | null>(null);
   const plan = useLiveQuery(() => db.mealPlans.get(ws), [ws]);
@@ -28,18 +29,27 @@ export function Shopping({ go, toast, settings, weekStart: ws }: ScreenProps & {
   const share = async () => { const t = text(); if (navigator.share) { try { await navigator.share({ title: 'Shopping list', text: t }); return; } catch { /* cancelled */ } } await navigator.clipboard.writeText(t); toast('Copied to clipboard'); };
   const resetPantry = () => db.pantry.put({ id: 'pantry', have: [] });
   const key = settings.kassalKey?.trim();
-  const fetchPrices = async (force = false) => {
+  const fetchPrices = async (force = false, quiet = false) => {
     if (!key) { go({ name: 'settings' }); return; }
     setBusy('0');
     const errs = await refreshPrices(toBuy.map((r) => r.ing.id), key, settings.kassalProxy, (d, t) => setBusy(`${d}/${t}`), force);
     setBusy(null);
-    if (errs.length) toast(errs[0].includes('Failed to fetch') ? 'Browser blocked the request — set a proxy URL in Settings' : errs[0]); else toast('Prices updated');
+    if (errs.length) toast(errs[0].includes('Failed to fetch') ? 'Browser blocked the request — set a proxy URL in Settings' : errs[0]); else if (!quiet) toast('Prices updated');
   };
   const offer = (id: string, c: Chain) => priceMap.get(id)?.offers.find((o) => o.chain === c);
   const totals = CHAINS.map((c) => { let sum = 0, n = 0; for (const r of toBuy) { const o = offer(r.ing.id, c); if (o) { sum += o.price * r.packs; n++; } } return { c, sum, n }; });
   const priced = totals.some((t) => t.n > 0);
   const cheapest = priced ? [...totals].filter((t) => t.n === Math.max(...totals.map((x) => x.n))).sort((a, b) => a.sum - b.sum)[0] : null;
   const oldest = prices.length ? Math.min(...prices.map((p) => p.fetchedAt)) : 0;
+  // Auto-refresh: when the list opens with a key set and prices missing or older than 2 days, fetch in the background (once per visit).
+  const autoRan = useRef(false);
+  const stale = toBuy.some((r) => { const c = priceMap.get(r.ing.id); return !c || Date.now() - c.fetchedAt > 2 * 86400000; });
+  useEffect(() => {
+    if (autoRan.current || !key || !toBuy.length || pricesRaw === undefined || plan === undefined || !stale || busy || !navigator.onLine) return;
+    autoRan.current = true;
+    fetchPrices(true, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, toBuy.length, stale]);
 
   return (
     <div className="screen">
@@ -64,9 +74,9 @@ export function Shopping({ go, toast, settings, weekStart: ws }: ScreenProps & {
                   </div>
                 ))}
               </div>
-              <div className="small muted">Cheapest matching product per chain via Kassalapp, × packs on your list. Prices from {new Date(oldest).toLocaleDateString('nb-NO')} — cached a week.</div>
+              <div className="small muted">Cheapest matching product per chain via Kassalapp, × packs on your list. Prices from {new Date(oldest).toLocaleDateString('nb-NO')} — refreshes by itself when older than 2 days, or tap Refresh.</div>
             </>
-          ) : <div className="small muted">{key ? 'Tap Get prices to look up this list in Kassalapp (free hobby key, 60 lookups a minute).' : 'Paste a free Kassalapp API key in Settings to see what this list costs at Kiwi, Meny and Coop.'}</div>}
+          ) : <div className="small muted">{key ? 'Looking up this list in Kassalapp… prices refresh automatically every 2 days.' : 'Paste a free Kassalapp API key in Settings to see what this list costs at Kiwi, Meny and Coop.'}</div>}
         </div>
       )}
       {byAisle.map((x) => (
