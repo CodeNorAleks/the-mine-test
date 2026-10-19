@@ -8,6 +8,18 @@ import type { ScreenProps } from './types';
 import { GYMS } from '../db/gyms';
 import { ACTIVITY, PACE, suggestedTargets } from '../lib/nutrition';
 
+/** Stable component (defined outside the screen) so the input keeps focus while typing. */
+function NumField({ label, value, onChange }: { label: string; value: number | undefined; onChange: (v: string) => void }) {
+  const [text, setText] = useState(value === undefined || Number.isNaN(value) ? '' : String(value));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => { if (!focused) setText(value === undefined || Number.isNaN(value) ? '' : String(value)); }, [value, focused]);
+  return (
+    <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>{label}</span>
+      <input className="field num" inputMode="decimal" value={text} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        onChange={(e) => { const v = e.target.value; setText(v); if (v === '' || /^-?\d*[.,]?\d*$/.test(v)) onChange(v); }} /></label>
+  );
+}
+
 export function SettingsScreen({ go, settings, toast }: ScreenProps) {
   const [s, setS] = useState<Settings>(settings);
   const [warm, setWarm] = useState(settings.warmup.join(', '));
@@ -26,9 +38,11 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
     if (changed || !isConfigured(prev)) { await resetConnection(); await queueAll(); }
     try { await syncNow({ ...s }); toast('Synced'); } catch (e) { toast((e as Error).message); }
   };
-  const num = (k: keyof Settings) => (e: React.ChangeEvent<HTMLInputElement>) => setS({ ...s, [k]: Number(e.target.value.replace(',', '.')) || 0 });
+  const setNum = (k: keyof Settings, v: string) => setS({ ...s, [k]: v === '' ? undefined : Number(v.replace(',', '.')) } as Settings);
   const save = async () => {
-    await db.settings.put({ ...s, warmup: warm.split(',').map((x) => x.trim()).filter(Boolean) });
+    const req = ['startKg', 'goalKg', 'bodyweightKg', 'kcalBudget', 'stepGoal', 'stepDaysGoal', 'restSeconds'] as const;
+    const fixed = { ...s } as Settings; for (const k of req) if (fixed[k] === undefined || Number.isNaN(fixed[k])) (fixed as unknown as Record<string, number>)[k] = 0;
+    await db.settings.put({ ...fixed, warmup: warm.split(',').map((x) => x.trim()).filter(Boolean) });
     toast('Settings saved'); go({ name: 'today' });
   };
   const exportJson = async () => {
@@ -51,9 +65,7 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
     });
     toast('Backup restored'); go({ name: 'today' });
   };
-  const F = ({ label, k, step }: { label: string; k: keyof Settings; step?: string }) => (
-    <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>{label}</span><input className="field num" inputMode="decimal" step={step} value={String(s[k] ?? '')} onChange={num(k)} /></label>
-  );
+
 
   return (
     <div className="screen">
@@ -66,8 +78,8 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
       <div className="card col" style={{ gap: 10 }}>
         <div className="label">You</div>
         <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Name</span><input className="field" value={s.name} onChange={(e) => setS({ ...s, name: e.target.value })} /></label>
-        <div className="grid3"><F label="Start kg" k="startKg" /><F label="Goal kg" k="goalKg" /><F label="Now kg" k="bodyweightKg" /></div>
-        <div className="grid3"><F label="Height cm" k="heightCm" /><F label="Age" k="age" />
+        <div className="grid3"><NumField label="Start kg" value={s.startKg as number | undefined} onChange={(v) => setNum('startKg', v)} /><NumField label="Goal kg" value={s.goalKg as number | undefined} onChange={(v) => setNum('goalKg', v)} /><NumField label="Now kg" value={s.bodyweightKg as number | undefined} onChange={(v) => setNum('bodyweightKg', v)} /></div>
+        <div className="grid3"><NumField label="Height cm" value={s.heightCm as number | undefined} onChange={(v) => setNum('heightCm', v)} /><NumField label="Age" value={s.age as number | undefined} onChange={(v) => setNum('age', v)} />
           <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Sex</span><select className="field" value={s.sex ?? ''} onChange={(e) => setS({ ...s, sex: (e.target.value || undefined) as Settings['sex'] })}><option value="">–</option><option value="male">Male</option><option value="female">Female</option></select></label></div>
         <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Activity outside the gym</span>
           <select className="field" value={s.activity ?? 'light'} onChange={(e) => setS({ ...s, activity: e.target.value as Settings['activity'] })}>{ACTIVITY.map((a) => <option key={a.id} value={a.id}>{a.label} · {a.hint}</option>)}</select></label>
@@ -86,13 +98,13 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
             <div className="small muted">You burn about {sugg.tdee} kcal a day with {trainingDays} training day{trainingDays === 1 ? '' : 's'}. {sugg.pace.label} = {sugg.pace.kcal > 0 ? '+' : ''}{sugg.pace.kcal} kcal{sugg.weeks ? ` → goal weight in about ${sugg.weeks} weeks` : ''}.{sugg.floored ? ' Capped at a safe minimum.' : ''} Protein is 2 g per kg of goal weight.</div>
           </div>
         ) : <div className="small muted">Fill in weight, height, age and sex above and I'll calculate your daily calories and protein.</div>}
-        <div className="grid2"><F label="kcal / day" k="kcalBudget" /><F label="Protein g / day" k="proteinTarget" /></div>
+        <div className="grid2"><NumField label="kcal / day" value={s.kcalBudget as number | undefined} onChange={(v) => setNum('kcalBudget', v)} /><NumField label="Protein g / day" value={s.proteinTarget as number | undefined} onChange={(v) => setNum('proteinTarget', v)} /></div>
       </div>
 
       <div className="card col" style={{ gap: 10 }}>
         <div className="label">Training</div>
-        <div className="grid3"><F label="Rest (sec)" k="restSeconds" /><F label="Step goal" k="stepGoal" /><F label="Step days / wk" k="stepDaysGoal" /></div>
-        <div className="grid2"><F label="Streak grace days / week" k="graceDays" />
+        <div className="grid3"><NumField label="Rest (sec)" value={s.restSeconds as number | undefined} onChange={(v) => setNum('restSeconds', v)} /><NumField label="Step goal" value={s.stepGoal as number | undefined} onChange={(v) => setNum('stepGoal', v)} /><NumField label="Step days / wk" value={s.stepDaysGoal as number | undefined} onChange={(v) => setNum('stepDaysGoal', v)} /></div>
+        <div className="grid2"><NumField label="Streak grace days / week" value={s.graceDays as number | undefined} onChange={(v) => setNum('graceDays', v)} />
           <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Theme</span><select className="field" value={s.theme ?? 'auto'} onChange={(e) => setS({ ...s, theme: e.target.value as Settings['theme'] })}><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select></label></div>
         <label className="col" style={{ gap: 4 }}><span className="label" style={{ fontSize: 10 }}>Warm-up (comma separated)</span><input className="field" value={warm} onChange={(e) => setWarm(e.target.value)} /></label>
       </div>
