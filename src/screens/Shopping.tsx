@@ -74,7 +74,7 @@ export function Shopping({ go, toast, settings, weekStart: ws }: ScreenProps & {
                   </div>
                 ))}
               </div>
-              <div className="small muted">Best value per chain via Kassalapp (cheapest per kg), priced for the grams on your list. Prices from {new Date(oldest).toLocaleDateString('nb-NO')} — refreshes by itself when older than 2 days, or tap Refresh.</div>
+              <div className="small muted">Best value per chain via Kassalapp (cheapest per kg), costed as the whole packs you'd buy. Prices from {new Date(oldest).toLocaleDateString('nb-NO')} — refreshes by itself when older than 2 days, or tap Refresh.</div>
             </>
           ) : <div className="small muted">{key ? 'Looking up this list in Kassalapp… prices refresh automatically every 2 days.' : 'Paste a free Kassalapp API key in Settings to see what this list costs at Kiwi, Meny and Coop.'}</div>}
         </div>

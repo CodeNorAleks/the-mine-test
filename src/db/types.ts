@@ -109,7 +109,7 @@ export interface Settings {
 }
 
 /** Cached store prices for one ingredient (Kassalapp). */
-export interface PriceCache { id: string; fetchedAt: number; q: string; offers: { chain: string; store: string; name: string; price: number; unitPrice?: number; unit?: string }[] }
+export interface PriceCache { id: string; fetchedAt: number; q: string; offers: { chain: string; store: string; name: string; price: number; unitPrice?: number; unit?: string; packKg?: number }[] }
 /** Pending local changes waiting to be pushed to the cloud. */
 export interface Outbox { key: string; table: string; id: string; op: 'put' | 'del'; at: number }
 /** Sync bookkeeping: last push/pull per device. */
