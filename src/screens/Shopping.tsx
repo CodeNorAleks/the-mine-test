@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useRef, useState } from 'react';
-import { CHAINS, nok, refreshPrices, type Chain } from '../lib/kassal';
+import { CHAINS, nok, offerCost, refreshPrices, type Chain } from '../lib/kassal';
 import { db } from '../db/db';
 import { WEEKDAYS } from '../db/types';
 import { ING, MEALS, SLOTS, type Aisle } from '../db/meals';
@@ -37,7 +37,7 @@ export function Shopping({ go, toast, settings, weekStart: ws }: ScreenProps & {
     if (errs.length) toast(errs[0].includes('Failed to fetch') ? 'Browser blocked the request — set a proxy URL in Settings' : errs[0]); else if (!quiet) toast('Prices updated');
   };
   const offer = (id: string, c: Chain) => priceMap.get(id)?.offers.find((o) => o.chain === c);
-  const totals = CHAINS.map((c) => { let sum = 0, n = 0; for (const r of toBuy) { const o = offer(r.ing.id, c); if (o) { sum += o.price * r.packs; n++; } } return { c, sum, n }; });
+  const totals = CHAINS.map((c) => { let sum = 0, n = 0; for (const r of toBuy) { const o = offer(r.ing.id, c); if (o) { sum += offerCost(o, r.grams, r.packs); n++; } } return { c, sum, n }; });
   const priced = totals.some((t) => t.n > 0);
   const cheapest = priced ? [...totals].filter((t) => t.n === Math.max(...totals.map((x) => x.n))).sort((a, b) => a.sum - b.sum)[0] : null;
   const oldest = prices.length ? Math.min(...prices.map((p) => p.fetchedAt)) : 0;
@@ -74,7 +74,7 @@ export function Shopping({ go, toast, settings, weekStart: ws }: ScreenProps & {
                   </div>
                 ))}
               </div>
-              <div className="small muted">Cheapest matching product per chain via Kassalapp, × packs on your list. Prices from {new Date(oldest).toLocaleDateString('nb-NO')} — refreshes by itself when older than 2 days, or tap Refresh.</div>
+              <div className="small muted">Best value per chain via Kassalapp (cheapest per kg), priced for the grams on your list. Prices from {new Date(oldest).toLocaleDateString('nb-NO')} — refreshes by itself when older than 2 days, or tap Refresh.</div>
             </>
           ) : <div className="small muted">{key ? 'Looking up this list in Kassalapp… prices refresh automatically every 2 days.' : 'Paste a free Kassalapp API key in Settings to see what this list costs at Kiwi, Meny and Coop.'}</div>}
         </div>
@@ -90,7 +90,7 @@ export function Shopping({ go, toast, settings, weekStart: ws }: ScreenProps & {
                   <div className="row" style={{ gap: 12 }}>
                     <span className={'tick' + (h ? ' done' : '')} style={{ width: 32, height: 32, borderRadius: 8 }}>{h && <Icon name="check" size={16} sw={3} />}</span>
                     <div><div style={{ fontWeight: 600, fontSize: 15, textDecoration: h ? 'line-through' : 'none' }}>{r.ing.name}</div><div className="small muted">{Math.round(r.grams)} g this week{h ? ' · have at home' : ''}</div>
-                      {priced && !h && priceMap.get(r.ing.id)?.offers.length ? <div className="small" style={{ fontSize: 11, color: 'var(--acc)', fontWeight: 600 }}>{CHAINS.map((c) => { const o = offer(r.ing.id, c); return o ? `${c} ${nok(o.price * r.packs)}` : null; }).filter(Boolean).join(' · ')}</div> : null}</div>
+                      {priced && !h && priceMap.get(r.ing.id)?.offers.length ? <div className="small" style={{ fontSize: 11, color: 'var(--acc)', fontWeight: 600 }}>{CHAINS.map((c) => { const o = offer(r.ing.id, c); return o ? `${c} ${nok(offerCost(o, r.grams, r.packs))}` : null; }).filter(Boolean).join(' · ')}</div> : null}</div>
                   </div>
                   <div className="display num" style={{ fontSize: 20, whiteSpace: 'nowrap' }}>{r.packs} × <span style={{ fontSize: 13, fontFamily: 'var(--body)', fontWeight: 600, color: 'var(--muted)' }}>{r.ing.packLabel}</span></div>
                 </button>
