@@ -7,6 +7,7 @@ import { db, uid } from '../db/db';
 import type { BlockExercise, Exercise, MuscleGroup } from '../db/types';
 import { Icon } from '../ui/Icon';
 import type { ScreenProps } from './types';
+import { Tips } from '../ui/Tips';
 
 const GROUPS: (MuscleGroup | 'All')[] = ['All', 'Back', 'Chest', 'Shoulders', 'Arms', 'Legs', 'Glutes', 'Abs', 'Cardio'];
 const GROUP_INK: Record<string, string> = { Back: '#2b3a52', Chest: '#6e4326', Shoulders: '#4a3a5c', Arms: '#4a3a5c', Legs: '#2f4d3a', Glutes: '#2f4d3a', Abs: '#4d4639', Cardio: '#4d4639' };
@@ -16,7 +17,12 @@ function BlockRow({ be, ex, exB, index, onChange, onRemove, onSetB, canSetB }: {
   const [open, setOpen] = useState(false);
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
   const num = (v: string) => (v === '' ? undefined : Math.max(0, Number(v)));
-  const summary = `${be.sets}×${be.reps}${be.targetKg ? ` · ${be.targetKg} kg` : ex?.bodyweight ? ' · BW' : ''}`;
+  const ps = be.perSet;
+  const summary = ps?.length
+    ? (new Set(ps.map((x) => `${x.kg ?? ''}×${x.reps}`)).size === 1 ? `${ps.length}×${ps[0].reps}${ps[0].kg ? ` · ${ps[0].kg} kg` : ''}` : ps.map((x) => `${x.kg ?? '–'}×${x.reps}`).join(' · '))
+    : `${be.sets}×${be.reps}${be.targetKg ? ` · ${be.targetKg} kg` : ex?.bodyweight ? ' · BW' : ''}`;
+  const rows = ps?.length ? ps : Array.from({ length: be.sets }, () => ({ kg: be.targetKg, reps: be.reps }));
+  const setRows = (next: { kg?: number; reps: number }[]) => onChange({ perSet: next, sets: next.length, reps: next[0]?.reps ?? be.reps, targetKg: Math.max(0, ...next.map((x) => x.kg ?? 0)) || undefined });
   return (
     <div ref={setNodeRef} style={style} className="col" >
       <div className="row" style={{ gap: 6, minHeight: 44, borderTop: index ? '1px solid var(--line)' : 0 }}>
@@ -32,13 +38,21 @@ function BlockRow({ be, ex, exB, index, onChange, onRemove, onSetB, canSetB }: {
         {be.weekB ? <><span className="label" style={{ fontSize: 9, color: 'var(--acc)' }}>Week B</span><span style={{ fontWeight: 600 }}>{exB?.name ?? be.weekB.exerciseId}</span><span className="muted">{be.weekB.sets}×{be.weekB.reps}{be.weekB.targetKg ? ` · ${be.weekB.targetKg} kg` : ''}</span><button className="muted" onClick={() => onChange({ weekB: undefined })}><Icon name="x" size={12} /></button></>
           : <button style={{ color: 'var(--acc)', fontWeight: 600 }} onClick={onSetB}>Use picked lift as week-B alternative</button>}
       </div>}
-      {open && <div className="row" style={{ gap: 6, paddingLeft: 26, paddingBottom: 8 }}>
-        {(['sets', 'reps', 'targetKg'] as const).map((k) => (
-          <label key={k} className="row" style={{ gap: 4, flex: 1 }}>
-            <span className="label" style={{ fontSize: 9 }}>{k === 'targetKg' ? 'kg' : k}</span>
-            <input className="field" style={{ height: 36, padding: '0 8px', fontSize: 15 }} inputMode="decimal" value={be[k] ?? ''} placeholder={k === 'targetKg' ? (ex?.bodyweight ? 'BW' : '–') : ''} onChange={(e) => onChange({ [k]: num(e.target.value) } as Partial<BlockExercise>)} />
-          </label>
+      {open && <div className="col" style={{ gap: 6, paddingLeft: 26, paddingBottom: 10 }}>
+        <div className="row" style={{ gap: 6 }}><span className="label" style={{ fontSize: 9, width: 28 }}>set</span><span className="label" style={{ fontSize: 9, flex: 1 }}>kg</span><span className="label" style={{ fontSize: 9, flex: 1 }}>reps</span><span style={{ width: 28 }} /></div>
+        {rows.map((r, i) => (
+          <div key={i} className="row" style={{ gap: 6 }}>
+            <span className="display" style={{ width: 28, fontSize: 16, color: 'var(--muted)' }}>{i + 1}</span>
+            <input className="field num" style={{ height: 36, padding: '0 8px', fontSize: 15, flex: 1 }} inputMode="decimal" placeholder={ex?.bodyweight ? 'BW' : '–'} value={r.kg ?? ''} onChange={(e) => { const v = num(e.target.value); setRows(rows.map((x, j) => (j === i ? { ...x, kg: v } : x))); }} />
+            <input className="field num" style={{ height: 36, padding: '0 8px', fontSize: 15, flex: 1 }} inputMode="numeric" value={r.reps} onChange={(e) => { const v = num(e.target.value) ?? 0; setRows(rows.map((x, j) => (j === i ? { ...x, reps: v } : x))); }} />
+            <button onClick={() => rows.length > 1 && setRows(rows.filter((_, j) => j !== i))} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}><Icon name="x" size={12} sw={2.5} /></button>
+          </div>
         ))}
+        <div className="row" style={{ gap: 6 }}>
+          <button className="pill sm" onClick={() => setRows([...rows, { ...rows[rows.length - 1] }])}>+ set</button>
+          <button className="pill sm" onClick={() => { const top = rows[rows.length - 1]; onChange({ perSet: undefined, sets: rows.length, reps: top.reps, targetKg: top.kg }); }}>Same for all</button>
+          <span className="small muted" style={{ marginLeft: 'auto' }}>{ps?.length ? 'per-set targets' : 'same every set'}</span>
+        </div>
       </div>}
     </div>
   );
@@ -138,8 +152,9 @@ export function BlockEditor({ go, blockId, toast }: ScreenProps & { blockId: str
           <div><button className="label kicker row" style={{ gap: 4 }} onClick={() => go({ name: 'plan' })}><Icon name="back" size={14} /> Plan · edit block</button><div className="display title">{block.name}</div></div>
           <div className="row" style={{ gap: 6 }}><button className="pill" onClick={rename}><Icon name="edit" size={16} /></button><button className="btn sm" onClick={() => go({ name: 'plan' })}>Done</button></div>
         </div>
-
-        <div className="card sticky-block" style={{ padding: '12px 16px', border: `2px solid ${block.ink}`, background: block.color }}>
+        <Tips screen="block" />
+        <div className="card sticky-block"
+ style={{ padding: '12px 16px', border: `2px solid ${block.ink}`, background: block.color }}>
           <div className="row between" style={{ marginBottom: 6 }}><div className="label" style={{ color: block.ink }}>{block.exercises.length} lifts</div><div className="small" style={{ color: block.ink, fontWeight: 600 }}>Tap the numbers to edit · drag grip to reorder</div></div>
           <div className="block-list" style={{ background: 'var(--card)', borderRadius: 12, padding: '6px 12px' }}>
             <SortableContext items={block.exercises.map((_, i) => 'blk-' + i)} strategy={verticalListSortingStrategy}>

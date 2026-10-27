@@ -4,8 +4,9 @@ import { db, uid } from '../db/db';
 import { Icon } from '../ui/Icon';
 import { Ring } from '../ui/Charts';
 import { addDays, fmtLong, today, weekStart, weekdayOf } from '../lib/dates';
-import { MEALS, SLOTS, SLOT_STYLE, mealMacros } from '../db/meals';
+import { SLOTS, SLOT_STYLE, mealMacros } from '../db/meals';
 import type { ScreenProps } from './types';
+import { Tips } from '../ui/Tips';
 
 export function Food({ settings, toast, go }: ScreenProps) {
   const t = today();
@@ -13,7 +14,8 @@ export function Food({ settings, toast, go }: ScreenProps) {
   const meals = useLiveQuery(() => db.meals.orderBy('order').toArray(), []) ?? [];
   const entries = useLiveQuery(() => db.food.where('date').equals(t).toArray(), [t]) ?? [];
   const plan = useLiveQuery(() => db.mealPlans.get(ws), [ws]);
-  const planned = SLOTS.map((s) => ({ slot: s, meal: MEALS.find((m) => m.id === plan?.days[weekdayOf(t)]?.[s]) })).filter((x) => x.meal);
+  const recipes = useLiveQuery(() => db.recipes.toArray(), []) ?? [];
+  const planned = SLOTS.map((s) => ({ slot: s, meal: recipes.find((m) => m.id === plan?.days[weekdayOf(t)]?.[s]) })).filter((x) => x.meal);
   const weekFood = useLiveQuery(() => db.food.where('date').between(addDays(t, -6), t, true, true).toArray(), [t]) ?? [];
   const weighIns = useLiveQuery(() => db.weighIns.orderBy('date').toArray(), []) ?? [];
   const proteinTarget = settings.proteinTarget ?? Math.round(settings.goalKg * 2);
@@ -44,6 +46,7 @@ export function Food({ settings, toast, go }: ScreenProps) {
   return (
     <div className="screen">
       <div className="head"><div><div className="label kicker">Food</div><div className="display title">{fmtLong(t).split(' · ')[0]}</div></div></div>
+      <Tips screen="food" />
       <div className="row" style={{ gap: 8 }}>
         <button className="btn acc" style={{ flex: 1 }} onClick={() => go({ name: 'meals' })}>Meal plan</button>
         <button className="btn ghost" style={{ flex: 1 }} onClick={() => go({ name: 'shopping', weekStart: weekStart() })}>Shopping list</button>

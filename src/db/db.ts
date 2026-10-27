@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie';
 import type { Block, Exercise, FoodEntry, MealPlan, MealPreset, Measurement, Outbox, Pantry, PriceCache, Program, Session, Settings, StepDay, SyncMeta, WeekPlan, WeekendLog, WeighIn } from './types';
 import { ALL_EXERCISES, BLOCKS, MEALS, SETTINGS } from './seed';
 import { PROGRAMS, PROGRAM_EXERCISES } from './programs';
+import { MEALS as RECIPES, type Meal } from './meals';
 
 export class MineDB extends Dexie {
   exercises!: Table<Exercise, string>;
@@ -21,6 +22,7 @@ export class MineDB extends Dexie {
   prices!: Table<PriceCache, string>;
   syncMeta!: Table<SyncMeta, string>;
   outbox!: Table<Outbox, string>;
+  recipes!: Table<Meal, string>;
 
   constructor() {
     super('the-mine');
@@ -51,6 +53,9 @@ export class MineDB extends Dexie {
     this.version(5).stores({
       outbox: 'key, at',
     });
+    this.version(6).stores({
+      recipes: 'id, slot',
+    });
   }
 }
 
@@ -60,11 +65,12 @@ export const db = new MineDB();
 export async function ensureSeed() {
   const settings = await db.settings.get('settings');
   if (!settings) {
-    await db.transaction('rw', db.exercises, db.blocks, db.meals, db.settings, db.programs, async () => {
+    await db.transaction('rw', [db.exercises, db.blocks, db.meals, db.settings, db.programs, db.recipes], async () => {
       await db.exercises.bulkPut([...ALL_EXERCISES, ...PROGRAM_EXERCISES]);
       await db.programs.bulkPut(PROGRAMS);
       await db.blocks.bulkPut(BLOCKS);
       await db.meals.bulkPut(MEALS);
+      await db.recipes.bulkPut(RECIPES);
       await db.settings.put(SETTINGS);
     });
     return;
@@ -72,6 +78,7 @@ export async function ensureSeed() {
   const existing = new Set((await db.exercises.toCollection().primaryKeys()) as string[]);
   const missing = [...ALL_EXERCISES, ...PROGRAM_EXERCISES].filter((e) => !existing.has(e.id));
   if (missing.length) await db.exercises.bulkAdd(missing);
+  if ((await db.recipes.count()) === 0) await db.recipes.bulkPut(RECIPES);
   const havePrograms = new Set((await db.programs.toCollection().primaryKeys()) as string[]);
   const newPrograms = PROGRAMS.filter((p) => !havePrograms.has(p.id));
   if (newPrograms.length) await db.programs.bulkAdd(newPrograms);

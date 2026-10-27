@@ -1,6 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, uid } from '../db/db';
-import { WEEKDAYS } from '../db/types';
 import { Icon } from '../ui/Icon';
 import { fmtKg, fmtLong, today, weekDates, weekStart, weekdayOf, addDays } from '../lib/dates';
 import { gymStatus, sessionTonnage, weekTonnage } from '../lib/stats';
@@ -11,6 +10,7 @@ import { useState } from 'react';
 import { readinessAdvice, type Readiness } from '../lib/recovery';
 import { reviewWeekFor, weekReview } from '../lib/review';
 import { ReviewCard } from '../ui/ReviewCard';
+import { Tips } from '../ui/Tips';
 
 export function Today({ go, settings, toast }: ScreenProps) {
   const t = today();
@@ -24,6 +24,9 @@ export function Today({ go, settings, toast }: ScreenProps) {
   const steps = useLiveQuery(() => db.steps.toArray(), []) ?? [];
   const [stepInput, setStepInput] = useState('');
   const [ready, setReady] = useState<Readiness | null>(null);
+  const [more, setMore] = useState<boolean>(() => { try { return localStorage.getItem('mine.today.more') === '1'; } catch { return false; } });
+  const toggleMore = () => { setMore(!more); try { localStorage.setItem('mine.today.more', !more ? '1' : '0'); } catch { /* ignore */ } };
+
   const foodAll = useLiveQuery(() => db.food.toArray(), []) ?? [];
 
   const days = week?.days ?? settings.defaultWeek;
@@ -34,6 +37,10 @@ export function Today({ go, settings, toast }: ScreenProps) {
   const review = reviewWs ? weekReview(reviewWs, sessions, weighIns, foodAll, steps, exMap, settings) : null;
   const todaySession = sessions.find((s) => s.date === t);
   const open = sessions.find((s) => !s.endedAt);
+  const hour = new Date().getHours();
+  const weighedToday = weighIns.some((w) => w.date === t);
+  const doneToday = !!todaySession?.endedAt;
+  const doneSets = todaySession?.sets.filter((s) => s.done).length ?? 0;
   const bw = weighIns.at(-1)?.kg ?? settings.bodyweightKg;
   const liftedToday = todaySession ? sessionTonnage(todaySession, exMap, bw) : 0;
   const liftedWeek = weekTonnage(sessions, ws, exMap, bw);
@@ -62,7 +69,9 @@ export function Today({ go, settings, toast }: ScreenProps) {
 
   const buildSets = () => {
     const b = isWeekB(t);
-    return block!.exercises.map((be) => (b && be.weekB ? be.weekB : be)).flatMap((be) => Array.from({ length: be.sets }, (_, i) => ({ exerciseId: be.exerciseId, setNo: i + 1, kg: be.targetKg ?? 0, reps: be.reps, done: false })));
+    return block!.exercises.map((be) => (b && be.weekB ? { ...be.weekB, perSet: undefined } : be)).flatMap((be) =>
+      be.perSet?.length ? be.perSet.map((ps, i) => ({ exerciseId: be.exerciseId, setNo: i + 1, kg: ps.kg ?? be.targetKg ?? 0, reps: ps.reps, done: false }))
+        : Array.from({ length: be.sets }, (_, i) => ({ exerciseId: be.exerciseId, setNo: i + 1, kg: be.targetKg ?? 0, reps: be.reps, done: false })));
   };
   const start = async (readiness?: Readiness) => {
     if (!block) return toast('No workout planned today — set one in Plan');
@@ -95,139 +104,126 @@ export function Today({ go, settings, toast }: ScreenProps) {
 
   return (
     <div className="screen">
-      <div className="row between" style={{ paddingTop: 20 }}>
+      <div className="row between" style={{ paddingTop: 12 }}>
         <div className="row" style={{ gap: 10 }}>
-          <img className="mark" src={import.meta.env.BASE_URL + 'lifter.png'} alt="" style={{ width: 36, height: 36, mixBlendMode: 'multiply' }} />
-          <div className="display" style={{ fontSize: 24, letterSpacing: '0.04em' }}>The Mine</div>
+          <img className="mark" src={import.meta.env.BASE_URL + 'lifter.png'} alt="" style={{ width: 34, height: 34, mixBlendMode: 'multiply' }} />
+          <div className="display" style={{ fontSize: 22, letterSpacing: '0.04em' }}>The Mine</div>
         </div>
         <div className="row" style={{ gap: 6 }}>
-          <div className="pill gold"><Icon name="flame" size={16} sw={2.5} />{st} day{st === 1 ? '' : 's'}</div>
+          <div className="pill gold"><Icon name="flame" size={16} sw={2.5} />{st}</div>
           <button className="pill" style={{ width: 36, padding: 0, justifyContent: 'center' }} onClick={() => go({ name: 'settings' })} aria-label="Settings"><Icon name="edit" size={16} /></button>
         </div>
       </div>
-      {!settings.name && <button className="card row between" style={{ padding: '12px 16px', textAlign: 'left', borderColor: 'var(--acc)' }} onClick={() => go({ name: 'settings' })}><div><div style={{ fontWeight: 600 }}>Set up your numbers</div><div className="small muted">Weight, height, age and goal — the app calculates your calories and protein. Stored only on this device.</div></div><Icon name="chev" size={18} /></button>}
-      <div className="head" style={{ paddingTop: 8 }}>
-        <div>
-          <div className="label kicker">{fmtLong(t)}</div>
-          <div className="display title">{block?.name ?? 'Rest day'}</div>
-        </div>
-      </div>
+      {!settings.name && <button className="card row between" style={{ textAlign: 'left', borderColor: 'var(--acc)' }} onClick={() => go({ name: 'settings' })}><div><div style={{ fontWeight: 600 }}>Set up your numbers</div><div className="small muted">Weight, height, age and goal — calories and protein are calculated for you.</div></div><Icon name="chev" size={18} /></button>}
 
-      <div className="row between" style={{ padding: '8px 0 0' }}>
+      {/* Week strip */}
+      <Tips screen="today" />
+      <div className="row between" style={{ padding: '4px 0 0' }}>
         {weekDates(ws).map(({ weekday, date }) => {
           const b = blocks.find((x) => x.id === days[weekday]);
           const done = sessions.some((s) => s.date === date && s.endedAt);
           const isToday = date === t;
           return (
-            <div key={weekday} className="col" style={{ alignItems: 'center', gap: 6 }}>
-              <div className="label" style={{ color: isToday ? 'var(--ink)' : undefined }}>{weekday.toUpperCase()}</div>
-              <div style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: done ? 'var(--ok-soft)' : isToday ? 'var(--ink)' : 'transparent', color: done ? 'var(--ok)' : '#fff',
-                border: done || isToday ? 0 : '1px dashed var(--faint)' }}>
-                {done ? <Icon name="check" size={18} sw={2.5} /> : isToday ? <Icon name="dumbbell" size={20} sw={2.5} /> : null}
+            <button key={weekday} className="col" style={{ alignItems: 'center', gap: 4 }} onClick={() => go({ name: 'plan' })}>
+              <div className="label" style={{ fontSize: 10, color: isToday ? 'var(--ink)' : undefined }}>{weekday.toUpperCase()}</div>
+              <div style={{ width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: done ? 'var(--ok-soft)' : isToday ? 'var(--ink)' : b ? 'var(--card)' : 'transparent', color: done ? 'var(--ok)' : isToday ? '#fff' : 'var(--muted)',
+                border: done || isToday ? 0 : b ? '1px solid var(--line)' : '1px dashed var(--faint)' }}>
+                {done ? <Icon name="check" size={18} sw={2.5} /> : b ? <Icon name="dumbbell" size={18} sw={2.5} /> : null}
               </div>
-              <div className="small" style={{ fontSize: 11, fontWeight: 600, color: isToday ? 'var(--ink)' : 'var(--muted)' }}>{b ? b.name.split(' ')[0] : 'Rest'}</div>
-            </div>
+              <div className="small" style={{ fontSize: 10, fontWeight: 600, color: isToday ? 'var(--ink)' : 'var(--muted)' }}>{b ? b.name.split(' ')[0] : 'Rest'}</div>
+            </button>
           );
         })}
       </div>
 
-      {ready && block && (() => { const adv = readinessAdvice(ready); return (
-        <div className="card col" style={{ gap: 14, borderColor: 'var(--acc)' }}>
-          <div className="row between"><div><div className="label">Readiness check</div><div className="display" style={{ fontSize: 22 }}>How are you today?</div></div><button className="small muted" onClick={() => { setReady(null); start({ sleep: 0, soreness: 0, mood: 0 }); }}>Skip</button></div>
-          <ReadyRow k="sleep" label="Sleep" lo="rough" hi="great" />
-          <ReadyRow k="soreness" label="Soreness" lo="none" hi="wrecked" />
-          <ReadyRow k="mood" label="Energy" lo="flat" hi="fired up" />
-          <div className="inner col" style={{ gap: 2 }}><div style={{ fontWeight: 700, color: adv.level === 'light' ? 'var(--danger)' : adv.level === 'push' ? 'var(--ok)' : 'var(--ink)' }}>{adv.title}</div><div className="small muted">{adv.detail}</div></div>
-          <button className="btn acc" onClick={() => start(ready)}>Start workout</button>
-        </div>
-      ); })()}
-      {review && (review.sessions > 0 || review.daysLogged > 0) && <ReviewCard r={review} exMap={exMap} title={reviewWs === ws ? 'Week in review' : 'Last week in review'} />}
-      {block && !ready && (
-        <button className="btn acc" onClick={() => start()}>
-          <Icon name="play" size={22} sw={2.5} />
-          <span>{open ? 'Continue workout' : todaySession?.endedAt ? 'Workout done · reopen' : 'Start workout'}</span>
-          <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.75, letterSpacing: '0.08em' }}>{block.exercises.length} lifts{isWeekB(t) && block.exercises.some((e) => e.weekB) ? ' · week B' : ''}</span>
-        </button>
-      )}
-
-      <div className="card col" style={{ gap: 12 }}>
-        <div className="row between"><div className="label">Warm-up</div><div className="small muted" style={{ fontWeight: 600 }}>{settings.warmup.filter((w) => warm[w]).length} / {settings.warmup.length}</div></div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {settings.warmup.map((w) => (
-            <button key={w} className={'chip' + (warm[w] ? ' done' : '')} onClick={() => toggleWarm(w)}>
-              {warm[w] ? <Icon name="check" size={16} sw={3} /> : <i className="box" />}<span>{w}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid2">
-        <div className="card ink col">
-          <div className="row" style={{ gap: 8 }}><Icon name="weight" size={18} /><div className="label">Lifted today</div></div>
-          <div className="display" style={{ fontSize: 34 }}>{fmtKg(liftedToday)}</div>
-          <div className="small" style={{ color: 'var(--faint)', fontWeight: 600 }}>{todaySession?.sets.filter((s) => s.done).length ?? 0} sets logged</div>
-        </div>
-        <div className="card col">
-          <div className="row" style={{ gap: 8, color: 'var(--muted)' }}><Icon name="weight" size={18} /><div className="label">Lifted · week</div></div>
-          <div className="display" style={{ fontSize: 34 }}>{fmtKg(liftedWeek)}</div>
-          <div className="small muted" style={{ fontWeight: 600 }}>{lastWeek ? `last week ${fmtKg(lastWeek)}` : 'first week logged'}</div>
-        </div>
-      </div>
-      {allTime > 0 && (
-        <div className="card col" style={{ gap: 8, padding: '12px 16px' }}>
-          <div className="row between"><div className="label">Hauled all time</div><div className="display num" style={{ fontSize: 22 }}>{fmtKg(allTime)}</div></div>
-          <div className="bar"><i style={{ width: `${Math.min(100, ms.pct * 100)}%` }} /></div>
-          <div className="small muted">{ms.reached ? `Past ${ms.reached.label}. ` : ''}{ms.next ? `Next: ${ms.next.label}` : 'Every milestone cleared.'}</div>
-        </div>
-      )}
-
-      <div className="grid2">
-        <button className="card col" style={{ textAlign: 'left' }} onClick={() => go({ name: 'body' })}>
-          <div className="row" style={{ gap: 8, color: 'var(--muted)' }}><Icon name="scale" size={18} /><div className="label">Weight</div></div>
-          <div className="display" style={{ fontSize: 32 }}>{weight ?? '—'}<span style={{ fontSize: 16, color: 'var(--muted)' }}> kg</span></div>
-          <div className="bar"><i style={{ width: `${pct * 100}%` }} /></div>
-          <div className="small muted" style={{ fontWeight: 600 }}>{weight ? `−${(settings.startKg - weight).toFixed(1)} of ${settings.startKg - settings.goalKg} kg to ${settings.goalKg}` : 'Log your first weigh-in'}</div>
-        </button>
-        <button className="card col" style={{ textAlign: 'left' }} onClick={() => go({ name: 'food' })}>
-          <div className="row" style={{ gap: 8, color: 'var(--muted)' }}><Icon name="food" size={18} /><div className="label">Calories</div></div>
-          <div className="display" style={{ fontSize: 32 }}>{kcal}<span style={{ fontSize: 16, color: 'var(--muted)' }}> / {settings.kcalBudget}</span></div>
-          <div className="bar"><i className="ok" style={{ width: `${Math.min(100, (kcal / settings.kcalBudget) * 100)}%` }} /></div>
-          <div className="small muted" style={{ fontWeight: 600 }}>{Math.max(0, settings.kcalBudget - kcal)} left</div>
-        </button>
-      </div>
-
-      <div className="card col" style={{ gap: 10 }}>
+      {/* Primary action */}
+      <div className="card col" style={{ gap: 12, borderColor: ready ? 'var(--acc)' : undefined }}>
         <div className="row between">
-          <div className="row" style={{ gap: 10 }}><span style={{ color: 'var(--acc)' }}><Icon name="steps" /></span><div><div style={{ fontWeight: 600 }}>Steps</div><div className="small muted">{stepDays} of {settings.stepDaysGoal} days over {settings.stepGoal / 1000}k this week</div></div></div>
-          <div className="display num" style={{ fontSize: 26 }}>{todaySteps?.toLocaleString('nb-NO') ?? '—'}</div>
+          <div><div className="label kicker" style={{ marginBottom: 2 }}>{fmtLong(t)}</div><div className="display" style={{ fontSize: 32 }}>{block?.name ?? 'Rest day'}</div></div>
+          {block && <div className="small muted" style={{ textAlign: 'right' }}>{block.exercises.length} lifts{isWeekB(t) && block.exercises.some((e) => e.weekB) ? ' · week B' : ''}</div>}
         </div>
-        <div className="row" style={{ gap: 6 }}>
-          {[5000, 8000, 10000, 12000].map((n) => <button key={n} className={'pill sm' + (todaySteps === n ? ' on' : '')} style={{ flex: 1, justifyContent: 'center' }} onClick={() => db.steps.put({ date: t, steps: n }).then(() => toast(`Steps: ${n.toLocaleString('nb-NO')}`))}>{n / 1000}k</button>)}
-        </div>
-        <div className="row">
-          <input className="field num" inputMode="numeric" placeholder="Exact steps" value={stepInput} onChange={(e) => setStepInput(e.target.value)} />
-          <button className="btn sm" onClick={saveSteps}>Save</button>
-        </div>
+        {ready && block ? (() => { const adv = readinessAdvice(ready); return (
+          <div className="col" style={{ gap: 12 }}>
+            <div className="row between"><div style={{ fontWeight: 600 }}>How are you today?</div><button className="small muted" onClick={() => { setReady(null); start({ sleep: 0, soreness: 0, mood: 0 }); }}>Skip</button></div>
+            <ReadyRow k="sleep" label="Sleep" lo="rough" hi="great" />
+            <ReadyRow k="soreness" label="Soreness" lo="none" hi="wrecked" />
+            <ReadyRow k="mood" label="Energy" lo="flat" hi="fired up" />
+            <div className="inner col" style={{ gap: 2 }}><div style={{ fontWeight: 700, color: adv.level === 'light' ? 'var(--danger)' : adv.level === 'push' ? 'var(--ok)' : 'var(--ink)' }}>{adv.title}</div><div className="small muted">{adv.detail}</div></div>
+            <button className="btn acc" onClick={() => start(ready)}>Start workout</button>
+          </div>
+        ); })() : block ? (
+          <button className="btn acc" onClick={() => start()}>
+            <Icon name="play" size={22} sw={2.5} />
+            <span>{open ? `Continue · ${doneSets}/${open.sets.length} sets` : doneToday ? 'Done · reopen' : 'Start workout'}</span>
+          </button>
+        ) : (
+          <button className="btn ghost" onClick={() => go({ name: 'plan' })}><Icon name="plus" size={20} sw={2.5} /> Add a workout today</button>
+        )}
+        {!open && !doneToday && block && hour < 11 && !weighedToday && <div className="small muted">Morning tip: weigh in before breakfast — tap + below.</div>}
+        {doneToday && <div className="small muted">Session saved · {fmtKg(liftedToday)} lifted. {hour >= 17 ? 'Log dinner with +.' : 'Rest well.'}</div>}
       </div>
 
-      {gymInfo && gym ? (
-        <button className="card col" style={{ gap: 10, textAlign: 'left' }} onClick={() => go({ name: 'settings' })}>
-          <div className="row between">
-            <div><div style={{ fontWeight: 600, fontSize: 16 }}>{gymInfo.chain ? gymInfo.chain + ' ' : ''}{gymInfo.name}</div><div className="small muted">{gymInfo.address}</div></div>
-            <div className={'pill sm ' + (gym.open ? 'ok' : '')} style={{ fontSize: 13 }}><i className="dot" style={{ background: gym.open ? 'var(--ok)' : 'var(--danger)' }} />{gym.open ? `Open · closes ${gym.closes}` : `Closed · opens ${gym.opens}`}</div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, gymInfo.hours.length)}, minmax(0, 1fr))`, gap: 8 }}>
-            {gymInfo.hours.map((h) => (
-              <div key={h.days} className="inner" style={{ outline: gym.today === h ? '1px solid var(--acc)' : 'none' }}><div className="label" style={{ fontSize: 10 }}>{h.days}</div><div className="small num" style={{ fontWeight: 600, marginTop: 2 }}>{h.open}–{h.close === '23:59' ? '24:00' : h.close}</div></div>
+      {/* Tiles */}
+      <div className="tiles">
+        <div className="tile ink"><div className="label">Lifted today</div><div className="v num">{fmtKg(liftedToday)}</div><div className="small" style={{ color: 'var(--faint)' }}>{doneSets} sets</div></div>
+        <button className="tile" onClick={() => go({ name: 'food' })}><div className="label">Calories</div><div className="v num">{kcal}</div><div className="bar"><i className="ok" style={{ width: `${Math.min(100, (kcal / settings.kcalBudget) * 100)}%` }} /></div><div className="small muted">{Math.max(0, settings.kcalBudget - kcal)} left</div></button>
+        <button className="tile" onClick={() => go({ name: 'body' })}><div className="label">Weight</div><div className="v num">{weight ?? '—'}</div><div className="bar"><i style={{ width: `${pct * 100}%` }} /></div><div className="small muted">{weight ? `${(weight - settings.goalKg).toFixed(1)} to go` : 'log weigh-in'}</div></button>
+      </div>
+
+      {review && (review.sessions > 0 || review.daysLogged > 0) && <ReviewCard r={review} exMap={exMap} title={reviewWs === ws ? 'Week in review' : 'Last week in review'} />}
+
+      <button className="more" onClick={toggleMore}><span>{more ? 'Less' : 'More'} · warm-up, steps, week, gym</span><Icon name="chev" size={16} style={{ transform: more ? 'rotate(-90deg)' : 'rotate(90deg)' }} /></button>
+      {more && <>
+        <div className="card col" style={{ gap: 10 }}>
+          <div className="row between"><div className="label">Warm-up</div><div className="small muted" style={{ fontWeight: 600 }}>{settings.warmup.filter((w) => warm[w]).length} / {settings.warmup.length}</div></div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {settings.warmup.map((w) => (
+              <button key={w} className={'chip' + (warm[w] ? ' done' : '')} onClick={() => toggleWarm(w)}>
+                {warm[w] ? <Icon name="check" size={16} sw={3} /> : <i className="box" />}<span>{w}</span>
+              </button>
             ))}
           </div>
-          {gymInfo.note && <div className="small muted">{gymInfo.note}</div>}
-        </button>
-      ) : (
-        <button className="card row between" style={{ padding: '12px 16px', textAlign: 'left' }} onClick={() => go({ name: 'settings' })}><div><div style={{ fontWeight: 600 }}>Choose your gym</div><div className="small muted">SATS, EVO or Fresh Fitness in Oslo — opening hours show here.</div></div><Icon name="chev" size={18} /></button>
-      )}
-      <div style={{ height: 4 }}>{WEEKDAYS.length ? null : null}</div>
+        </div>
+        <div className="card col" style={{ gap: 10 }}>
+          <div className="row between">
+            <div className="row" style={{ gap: 10 }}><span style={{ color: 'var(--acc)' }}><Icon name="steps" /></span><div><div style={{ fontWeight: 600 }}>Steps</div><div className="small muted">{stepDays} of {settings.stepDaysGoal} days over {settings.stepGoal / 1000}k this week</div></div></div>
+            <div className="display num" style={{ fontSize: 24 }}>{todaySteps?.toLocaleString('nb-NO') ?? '—'}</div>
+          </div>
+          <div className="row" style={{ gap: 6 }}>
+            {[5000, 8000, 10000, 12000].map((n) => <button key={n} className={'pill sm' + (todaySteps === n ? ' on' : '')} style={{ flex: 1, justifyContent: 'center' }} onClick={() => db.steps.put({ date: t, steps: n }).then(() => toast(`Steps: ${n.toLocaleString('nb-NO')}`))}>{n / 1000}k</button>)}
+          </div>
+          <div className="row">
+            <input className="field num" inputMode="numeric" placeholder="Exact steps" value={stepInput} onChange={(e) => setStepInput(e.target.value)} />
+            <button className="btn sm" onClick={saveSteps}>Save</button>
+          </div>
+        </div>
+        <div className="card col" style={{ gap: 8 }}>
+          <div className="row between"><div className="label">Lifted this week</div><div className="display num" style={{ fontSize: 22 }}>{fmtKg(liftedWeek)}</div></div>
+          <div className="small muted">{lastWeek ? `last week ${fmtKg(lastWeek)}` : 'first week logged'}</div>
+          {allTime > 0 && <>
+            <div className="row between" style={{ marginTop: 4 }}><div className="label">Hauled all time</div><div className="display num" style={{ fontSize: 22 }}>{fmtKg(allTime)}</div></div>
+            <div className="bar"><i style={{ width: `${Math.min(100, ms.pct * 100)}%` }} /></div>
+            <div className="small muted">{ms.reached ? `Past ${ms.reached.label}. ` : ''}{ms.next ? `Next: ${ms.next.label}` : 'Every milestone cleared.'}</div>
+          </>}
+        </div>
+        {gymInfo && gym ? (
+          <button className="card col" style={{ gap: 10, textAlign: 'left' }} onClick={() => go({ name: 'settings' })}>
+            <div className="row between">
+              <div><div style={{ fontWeight: 600, fontSize: 16 }}>{gymInfo.chain ? gymInfo.chain + ' ' : ''}{gymInfo.name}</div><div className="small muted">{gymInfo.address}</div></div>
+              <div className={'pill sm ' + (gym.open ? 'ok' : '')} style={{ fontSize: 13 }}><i className="dot" style={{ background: gym.open ? 'var(--ok)' : 'var(--danger)' }} />{gym.open ? `Open · closes ${gym.closes}` : `Closed · opens ${gym.opens}`}</div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, gymInfo.hours.length)}, minmax(0, 1fr))`, gap: 8 }}>
+              {gymInfo.hours.map((h) => (
+                <div key={h.days} className="inner" style={{ outline: gym.today === h ? '1px solid var(--acc)' : 'none' }}><div className="label" style={{ fontSize: 10 }}>{h.days}</div><div className="small num" style={{ fontWeight: 600, marginTop: 2 }}>{h.open}–{h.close === '23:59' ? '24:00' : h.close}</div></div>
+              ))}
+            </div>
+            {gymInfo.note && <div className="small muted">{gymInfo.note}</div>}
+          </button>
+        ) : (
+          <button className="card row between" style={{ textAlign: 'left' }} onClick={() => go({ name: 'settings' })}><div><div style={{ fontWeight: 600 }}>Choose your gym</div><div className="small muted">SATS, EVO or Fresh Fitness — opening hours show here.</div></div><Icon name="chev" size={18} /></button>
+        )}
+      </>}
     </div>
   );
 }

@@ -11,7 +11,7 @@ import Dexie from 'dexie';
 import { db } from '../db/db';
 import type { Settings } from '../db/types';
 
-export const SYNC_TABLES = ['settings', 'exercises', 'blocks', 'weeks', 'sessions', 'weighIns', 'steps', 'food', 'meals', 'weekend', 'programs', 'measurements', 'mealPlans', 'pantry'] as const;
+export const SYNC_TABLES = ['settings', 'exercises', 'blocks', 'weeks', 'sessions', 'weighIns', 'steps', 'food', 'meals', 'weekend', 'programs', 'measurements', 'mealPlans', 'pantry', 'recipes'] as const;
 
 let applyingRemote = false;
 let hooked = false;
@@ -130,14 +130,49 @@ async function pull(f: NonNullable<typeof fb>) {
   await db.syncMeta.put({ ...meta, lastPull: newest });
 }
 
-/** First-time: queue everything local so a fresh vault gets the full picture. */
-export async function queueAll() {
+/** Does the vault already hold settings (i.e. another device has synced before)? */
+export async function vaultHasData(settings: Settings) {
+  const f = await connect(settings);
+  const { doc, getDoc } = f.fs;
+  const snap = await getDoc(doc(f.dbRef, 'vaults', f.vault, 'settings', 'settings'));
+  return snap.exists();
+}
+
+const LOG_TABLES = ['sessions', 'weighIns', 'steps', 'food', 'measurements'] as const;
+/**
+ * First-time on this device: queue local records for upload.
+ * Empty vault → everything. Vault with data → only this device's logs, so remote settings/plans/recipes win and nothing is overwritten by defaults.
+ */
+export async function queueAll(onlyLogs = false) {
   const now = Date.now();
   for (const t of SYNC_TABLES) {
+    if (onlyLogs && !(LOG_TABLES as readonly string[]).includes(t)) continue;
     const keys = (await db.table(t).toCollection().primaryKeys()) as unknown[];
     await db.outbox.bulkPut(keys.map((k) => ({ key: `${t}:${String(k)}`, table: t, id: String(k), op: 'put' as const, at: now })));
   }
   setState({ pending: await db.outbox.count() });
+}
+
+/** Join a vault: save credentials, pull first, then upload only what this device alone has. */
+export async function joinVault(patch: Pick<Settings, 'firebase' | 'syncCode'> & { kassalKey?: string }) {
+  const cur = (await db.settings.get('settings'))!;
+  const next: Settings = { ...cur, firebase: patch.firebase, syncCode: patch.syncCode, kassalKey: patch.kassalKey || cur.kassalKey };
+  await db.settings.put(next);
+  await resetConnection();
+  await db.outbox.clear();
+  const has = await vaultHasData(next);
+  if (has) { await syncNow(next, 'pull'); await queueAll(true); await syncNow(next, 'push'); }
+  else { await queueAll(false); await syncNow(next, 'push'); }
+  return has;
+}
+
+/** Encode what another device needs to join, for a QR / link. */
+export function pairingPayload(s: Settings) {
+  const data = { f: parseConfig(s.firebase ?? ''), c: s.syncCode ?? '', k: s.kassalKey ?? '' };
+  return btoa(unescape(encodeURIComponent(JSON.stringify(data)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+export function decodePairing(p: string): { f: Record<string, string>; c: string; k?: string } | null {
+  try { const b = p.replace(/-/g, '+').replace(/_/g, '/'); const o = JSON.parse(decodeURIComponent(escape(atob(b + '='.repeat((4 - (b.length % 4)) % 4))))); return o?.f?.apiKey && o?.c ? o : null; } catch { return null; }
 }
 
 /** Call once at startup. */

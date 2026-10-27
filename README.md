@@ -93,6 +93,14 @@ Free tier is plenty for one person. Your data lives in **your** Firebase project
 
 Note: anyone with your config *and* vault code can read the vault, and Anonymous auth lets anyone with the config write *somewhere* in your project — fine for personal use; lock the rules to your own UID later if you want.
 
+## v1.3 (test branch)
+
+- Simpler layout: Today shows the one next action (start / continue / reopen), three tiles, and a "More" section; a global **+** button logs food, weigh-in or steps from anywhere; Plan has **Lifts | Meals** tabs; rest days say "+ Add workout"; nav order Today · Plan · Workout · Body · Food · Progress; the phone's back button works inside the app.
+- Per-set targets in the block editor (tap the number chip): pyramids and top sets pre-fill the workout.
+- Meals live in your database now: create your own from the ingredient register (live kcal/protein), edit or delete the seeded 22, and add one-off meals to a day (name + kcal). All synced.
+- Pairing by QR: Settings → Cloud sync → "Pair another device". Joining a vault pulls first and only uploads this device's own logs, so defaults never overwrite your data.
+- First-run onboarding (numbers → pace → gym → plan), one-time tips on each screen, and a "How it works" page under Settings.
+
 ## To do
 
 - fitnessprogramer.com directory with GIFs

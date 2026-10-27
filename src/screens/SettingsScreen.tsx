@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { isConfigured, onSync, parseConfig, queueAll, resetConnection, syncNow, type SyncState } from '../lib/sync';
+import { isConfigured, joinVault, onSync, pairingPayload, parseConfig, resetConnection, syncNow, type SyncState } from '../lib/sync';
+import QRCode from 'qrcode';
 import { db } from '../db/db';
 import type { Settings, Weekday } from '../db/types';
 import { WEEKDAYS } from '../db/types';
@@ -30,13 +31,20 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
   const cfgOk = !!parseConfig(s.firebase ?? '');
   const trainingDays = WEEKDAYS.filter((d) => s.defaultWeek[d]).length;
   const sugg = suggestedTargets(s, trainingDays);
+  const [qr, setQr] = useState<string | null>(null);
   const connectSync = async () => {
     if (!cfgOk || !s.syncCode?.trim()) { toast('Paste the Firebase config and choose a vault code first'); return; }
     const prev = await db.settings.get('settings');
     const changed = prev?.firebase !== s.firebase || prev?.syncCode !== s.syncCode;
     await db.settings.put({ ...s, warmup: warm.split(',').map((x) => x.trim()).filter(Boolean) });
-    if (changed || !isConfigured(prev)) { await resetConnection(); await queueAll(); }
-    try { await syncNow({ ...s }); toast('Synced'); } catch (e) { toast((e as Error).message); }
+    try {
+      if (changed || !isConfigured(prev)) { const had = await joinVault({ firebase: s.firebase, syncCode: s.syncCode }); toast(had ? 'Joined — pulled your data' : 'Vault created — uploaded this device'); const fresh = await db.settings.get('settings'); if (fresh) setS(fresh); }
+      else { await syncNow({ ...s }); toast('Synced'); }
+    } catch (e) { toast((e as Error).message); }
+  };
+  const showPairQr = async () => {
+    const url = `${location.origin}${import.meta.env.BASE_URL}?pair=${pairingPayload(s)}`;
+    setQr(await QRCode.toDataURL(url, { width: 520, margin: 1, color: { dark: '#15161a', light: '#ffffff' } }));
   };
   const setNum = (k: keyof Settings, v: string) => setS({ ...s, [k]: v === '' ? undefined : Number(v.replace(',', '.')) } as Settings);
   const save = async () => {
@@ -73,7 +81,7 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
         <div><button className="label kicker row" style={{ gap: 4 }} onClick={() => go({ name: 'today' })}><Icon name="back" size={14} /> Today</button><div className="display title">Settings</div></div>
         <button className="btn sm acc" onClick={save}>Save</button>
       </div>
-      <div className="small muted">Everything here stays on this device. Nothing is uploaded anywhere.</div>
+      <div className="row between"><div className="small muted">Everything here stays on this device unless you turn on sync.</div><button className="pill sm" onClick={() => go({ name: 'help' })}>How it works</button></div>
 
       <div className="card col" style={{ gap: 10 }}>
         <div className="label">You</div>
@@ -141,6 +149,18 @@ export function SettingsScreen({ go, settings, toast }: ScreenProps) {
           <button className="btn acc sm" style={{ flex: 1 }} onClick={connectSync} disabled={sync.status === 'syncing'}>{isConfigured(settings) ? 'Sync now' : 'Connect & sync'}</button>
           {isConfigured(settings) && <button className="btn ghost sm" style={{ flex: 1 }} onClick={async () => { await db.settings.update('settings', { firebase: '', syncCode: '' }); setS({ ...s, firebase: '', syncCode: '' }); await resetConnection(); toast('Sync turned off on this device'); }}>Turn off</button>}
         </div>
+        {isConfigured(settings) && <button className="btn sm" onClick={showPairQr}>Pair another device (QR)</button>}
+        {qr && (
+          <div className="sheet-back" onClick={() => setQr(null)}>
+            <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ alignItems: 'center', padding: '0 16px 24px' }}>
+              <div className="sheet-grip" />
+              <div className="display" style={{ fontSize: 22, margin: '4px 0 6px' }}>Scan with the other phone</div>
+              <div className="small muted" style={{ textAlign: 'center', marginBottom: 12 }}>Open the camera, point it here, tap the link. The app opens, asks to join, and pulls everything from your vault. The QR contains your sync credentials — only show it to your own devices.</div>
+              <img src={qr} alt="Pairing QR" style={{ width: 'min(70vw, 320px)', height: 'auto', borderRadius: 12, background: '#fff', padding: 8 }} />
+              <button className="pill sm" style={{ marginTop: 14 }} onClick={() => setQr(null)}>Close</button>
+            </div>
+          </div>
+        )}
         {sync.status === 'error' && <div className="small" style={{ color: 'var(--danger)' }}>{sync.message}</div>}
         {sync.pending > 0 && sync.status !== 'syncing' && <div className="small muted">{sync.pending} change{sync.pending === 1 ? '' : 's'} waiting to upload.</div>}
         <div className="small muted">Free: create a project at console.firebase.google.com → add a Web app → copy the config here → Build › Authentication: enable Anonymous → Build › Firestore: create database, rules <code>allow read, write: if request.auth != null;</code>. Then paste the same config and vault code on your other devices. Full steps in the README.</div>

@@ -4,7 +4,7 @@ export interface Ingredient { id: string; name: string; kcal: number; protein: n
 export type Slot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export const SLOTS: Slot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 export interface MealItem { ingredientId: string; grams: number }
-export interface Meal { id: string; name: string; slot: Slot; items: MealItem[]; note?: string }
+export interface Meal { id: string; name: string; slot: Slot; items: MealItem[]; note?: string; kcal?: number; protein?: number; adhoc?: boolean; custom?: boolean }
 
 const I = (id: string, name: string, kcal: number, protein: number, aisle: Aisle, pack: number, packLabel: string): Ingredient => ({ id, name, kcal, protein, aisle, pack, packLabel });
 export const INGREDIENTS: Ingredient[] = [
@@ -86,6 +86,7 @@ export const MEALS: Meal[] = [
 
 export const ING = new Map(INGREDIENTS.map((i) => [i.id, i]));
 export function mealMacros(m: Meal) {
+  if (!m.items.length && (m.kcal || m.protein)) return { kcal: m.kcal ?? 0, protein: m.protein ?? 0 };
   return m.items.reduce((a, it) => { const g = ING.get(it.ingredientId); if (!g) return a; return { kcal: a.kcal + (g.kcal * it.grams) / 100, protein: a.protein + (g.protein * it.grams) / 100 }; }, { kcal: 0, protein: 0 });
 }
 export const SLOT_STYLE: Record<Slot, { bg: string; ink: string }> = {

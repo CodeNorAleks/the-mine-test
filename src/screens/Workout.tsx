@@ -9,6 +9,7 @@ import { lastPerformance, sessionTonnage } from '../lib/stats';
 import { epley1RM, isBarbell, plates, progression, warmupRamp } from '../lib/training';
 import { readinessAdvice } from '../lib/recovery';
 import type { ScreenProps } from './types';
+import { Tips } from '../ui/Tips';
 
 export function Workout({ go, settings, toast }: ScreenProps) {
   const sessions = useLiveQuery(() => db.sessions.toArray(), []) ?? [];
@@ -125,6 +126,7 @@ export function Workout({ go, settings, toast }: ScreenProps) {
         </div>
       </div>
       <div className="bar" style={{ height: 4 }}><i style={{ width: `${(doneCount / Math.max(1, session.sets.length)) * 100}%` }} /></div>
+      <Tips screen="workout" />
 
       <div className="col" style={{ gap: 6, paddingTop: 8 }}>
         <div className="row between" style={{ alignItems: 'flex-start', gap: 8 }}>

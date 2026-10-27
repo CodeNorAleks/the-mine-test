@@ -23,6 +23,8 @@ export interface BlockExercise {
   sets: number;
   reps: number;
   targetKg?: number;
+  /** Per-set targets (pyramids etc.). When set, overrides sets/reps/targetKg for building a session. */
+  perSet?: { kg?: number; reps: number }[];
   /** Week-B alternative (used on even ISO weeks when set), e.g. conventional deadlift instead of trap bar. */
   weekB?: { exerciseId: string; sets: number; reps: number; targetKg?: number };
 }

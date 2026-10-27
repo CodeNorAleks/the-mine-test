@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CHAINS, nok, offerCost, refreshPrices, type Chain } from '../lib/kassal';
 import { db } from '../db/db';
 import { WEEKDAYS } from '../db/types';
-import { ING, MEALS, SLOTS, type Aisle } from '../db/meals';
+import { ING, SLOTS, type Aisle } from '../db/meals';
 import { Icon } from '../ui/Icon';
 import { fmtRange, isoWeekNumber } from '../lib/dates';
 import type { ScreenProps } from './types';
@@ -18,7 +18,8 @@ export function Shopping({ go, toast, settings, weekStart: ws }: ScreenProps & {
   const plan = useLiveQuery(() => db.mealPlans.get(ws), [ws]);
   const pantry = useLiveQuery(() => db.pantry.get('pantry'), []);
   const have = new Set(pantry?.have ?? []);
-  const meals = new Map(MEALS.map((m) => [m.id, m]));
+  const recipes = useLiveQuery(() => db.recipes.toArray(), []) ?? [];
+  const meals = new Map(recipes.map((m) => [m.id, m]));
   const grams = new Map<string, number>();
   if (plan) for (const wd of WEEKDAYS) for (const s of SLOTS) { const m = plan.days[wd][s] && meals.get(plan.days[wd][s]!); if (m) for (const it of m.items) grams.set(it.ingredientId, (grams.get(it.ingredientId) ?? 0) + it.grams); }
   const rows = [...grams].map(([id, g]) => { const ing = ING.get(id)!; return { ing, grams: g, packs: Math.max(1, Math.ceil(g / ing.pack)) }; }).filter((r) => r.ing.id !== 'creatine' || !have.has('creatine'));
